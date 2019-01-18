@@ -132,7 +132,7 @@ class DBManager:
                         where_or_clause += "OR "
                     key_str += str(key)
                     value_list.append(value)
-                    update_str += str(key) + "= %s"
+                    update_str += str(key) + "=%s"
                     where_or_clause += str(key) + "=%s "
             for i in range(0, len(value_list)):
                 value_alias += "%s"
@@ -152,19 +152,22 @@ class DBManager:
         """
         key_str = DBManager.KEY_STR_DELIMITER.join(key_dict.keys())
         key_str += (DBManager.KEY_STR_DELIMITER
-                    + DBManager.KEY_STR_DELIMITER.join(key_dict.values()))
+                    + DBManager.KEY_STR_DELIMITER.join(
+                        [str(i) for i in key_dict.values()]))
         return key_str
 
     @staticmethod
-    def key_to_dict(key_str):
+    def key_to_dict(key):
         """
-        Generates a dictionary of column:value from key_str.
+        Generates a dictionary of column:value from key.
         """
-        key_list = key_str.split(DBManager.KEY_STR_DELIMITER)
-        key_length = len(key_list) / 2
-        dict_keys = key_list[key_length:]
-        dict_values = key_list[:key_length]
-        key_dict = {dict_keys[i]:dict_values[i] for i in range(0, key_length-1)}
+        if isinstance(key, dict):
+            return key
+        key_list = str(key).split(DBManager.KEY_STR_DELIMITER)
+        key_length = len(key_list) // 2
+        dict_keys = key_list[:key_length]
+        dict_values = key_list[key_length:]
+        key_dict = {dict_keys[i]:dict_values[i] for i in range(0, key_length)}
         return key_dict
 
     def connect(self, charset="utf8mb4", use_unicode=True):
@@ -189,7 +192,7 @@ class DBManager:
             try:
                 self.db.close()
             except (MySQLdb.Error, MySQLdb.Warning) as e:
-                print("In db.close - Error: %s" % (e,))
+                print("DBManager.close: %s" % (e,))
 
     def list_tables(self):
         """
@@ -202,7 +205,7 @@ class DBManager:
                 cursor.execute(query)
                 results = cursor.fetchall()
             except MySQLdb.Error as e:
-                print("In db.list_tables - Error: %s " % (e,))
+                print("DBManager.list_tables: %s " % (e,))
                 return False
             table_list = [i[0] for i in results]
             return table_list
@@ -226,7 +229,7 @@ class DBManager:
                 cursor.execute(query)
                 results = cursor.fetchall()
             except MySQLdb.Error as e:
-                print("In db.table_structure - Error: %s" % (e,))
+                print("DBManager.table_structure: %s" % (e,))
                 return {}
             table_dict = {}
             for table_field in results:
@@ -295,7 +298,8 @@ class DBManager:
         try:
             cursor.execute(query, value_list)
         except MySQLdb.Error as e:
-            print(e)
+            print("DBManager.fetch_row: %s" % (e,))
+            return []
         result = cursor.fetchone()
         return result
 
@@ -321,7 +325,7 @@ class DBManager:
         try:
             cursor.execute(query, value_list)
         except MySQLdb.Error as e:
-            print(e)
+            print("DBManager.fetch_rows: %s" % (e,))
         results = cursor.fetchall()
         primary_keys = self.primary_key_list(table_name)
         rows_dict = {}
@@ -349,33 +353,83 @@ class DBManager:
             cursor.execute(query, params['value_list'])
             self.db.commit()
         except MySQLdb.Error as e:
-            print(e)
+            print("DBManager.insert_row: %s" % (e,))
             self.db.rollback()
             return False
         lastrowid = cursor.lastrowid
         if not lastrowid:
             lastrowid = -1
-        return lastrowid
+        return self.primary_key_list(table_name)[0] + DBManager.KEY_STR_DELIMITER + str(lastrowid)
 
-    def update_row(self, table_name, key_dict, row_dict):
+    def update_rows(self, table_name, row_dict, where_dict):
         """
-        Update row with primary key key_dict according to row_dict
+        Update rows matching where_dict according to row_dict.
+
+        Args:
+            table_name (str): Name of the table to update.
+            row_dict (dict): Column:value pairs to update
+            where_dict (dict): Column:value pairs for where clause.
         """
         params = DBManager._query_params(row_dict)
-        where_clause = DBManager._build_where(key_dict)
+        (where_clause, where_values) = DBManager._build_where(where_dict)
         query = ("UPDATE %s SET %s WHERE %s" %
-                 table_name,
-                 params['update_str'],
-                 where_clause)
+                 (table_name,
+                  params['update_str'],
+                  where_clause))
         try:
             cursor = self.db.cursor()
-            cursor.execute(query, params['value_list'])
+            cursor.execute(query, params['value_list'] + where_values)
             self.db.commit()
             return True
         except MySQLdb.Error as e:
-            print(e)
+            print("DBManager.update_row: %s" % (e,))
             self.db.rollback()
             return False
+
+    def update_row(self, table_name, key, row_dict):
+        """
+        Update row with primary key key_dict according to row_dict.
+
+        Args:
+            table_name (str): Name of table to update.
+            key (str, int or dict): Primary key or key dict of row to update.
+            row_dict: Dict of column:value pairs to update row with.
+
+        Returns:
+            True if successful, False otherwise.
+        """
+        key_dict = DBManager.key_to_dict(key)
+        return self.update_rows(table_name, row_dict, key_dict)
+
+    def delete_rows(self, table_name, where_dict, or_clause=False):
+        """
+        Deletes rows from table_name matching where_dict.
+        """
+        (where_clause, value_list) = DBManager._build_where(where_dict, or_clause)
+        query = "DELETE FROM %s WHERE %s" % (table_name, where_clause)
+        try:
+            cursor = self.db.cursor()
+            cursor.execute(query, value_list)
+            self.db.commit()
+            return True
+        except MySQLdb.Error as e:
+            print("DBManager.delete_rows: %s" % (e,))
+            self.db.rollback()
+            return False
+
+    def delete_row(self, table_name, key):
+        """
+        Delete row from table_name with key matching key.
+
+        Args:
+            table_name (str): Name of the table to delete from.
+            key (str, int or dict): Primary key or key dict of row to delete.
+        """
+        key_dict = DBManager.key_to_dict(key)
+        if list(key_dict.keys()) == self.primary_key_list(table_name):
+            return self.delete_rows(table_name, key_dict)
+        raise ValueError("DBManager.delete_row must be called with primary" +
+                         " key of row to be deleted")
 
 class DBTable:
     """
@@ -394,15 +448,10 @@ class DBTable:
         self.rows = {}
         self.row_status = {}
         self.next_key = 0
+        self.fields = self.manager.table_fields(self.table_name)
 
     def __str__(self):
         return "%s|%s" % (self.manager, self.table_name)
-
-    def fields_list(self):
-        """
-        Returns list of fields in table.
-        """
-        return self.manager.table_fields(self.table_name)
 
     def table_structure(self):
         """
@@ -422,8 +471,8 @@ class DBTable:
                                matches. Otherwise, skip matching rows.
         """
         rows = self.manager.fetch_rows(self.table_name, where_dict, limit)
-        for row_key, row_data in rows:
-            if overwrite or row_key not in self.rows.keys()
+        for row_key, row_data in rows.items():
+            if overwrite or not row_key in self.rows.keys():
                 self.rows[row_key] = row_data
                 self.row_status[row_key] = DBTable.RowStatus.SYNCED
         return rows
@@ -439,6 +488,47 @@ class DBTable:
         self.rows[row_key] = row
         return self.rows[row_key]
 
+    def insert_row(self, row_dict):
+        """
+        Inserts a row into table.
+
+        Args:
+            row_dict (dict): Dictionary of field:value pairs.
+
+        Returns:
+            If successful, lastrowid if available, -1 otherwise. False otherwise
+        """
+        return self.manager.insert_row(self.table_name, row_dict)
+
+    def update_row(self, row_key, row_dict):
+        """
+        Update row with primary key key_dict according to row_dict.
+
+        Args:
+            row_key (str or dict): Primary key or key dict of row to update.
+            row_dict: Dict of column:value pairs to update row with.
+
+        Returns:
+            True if successful, False otherwise.
+        """
+        return self.manager.update_row(self.table_name, row_key, row_dict)
+
+    def delete_row(self, row_key):
+        """
+        Delete row from table_name with key matching key.
+
+        Args:
+            table_name (str): Name of the table to delete from.
+            key (str, int or dict): Primary key or key dict of row to delete.
+        """
+        return self.manager.delete_row(self.table_name, row_key)
+
+    def delete_rows(self, where_dict, or_clause=False):
+        """
+        Deletes rows from table_name matching where_dict.
+        """
+        return self.manager.delete_rows(self.table_name, where_dict, or_clause)
+
     def entity_from_row(self, row_key):
         """
         Create a new entity associated with row_key.
@@ -452,7 +542,7 @@ class DBTable:
         Returns a dictionary of DBEntities corresponding to self.rows
         """
         entity_dict = {row_key:self.entity_from_row(row_key)
-                       for row_key in self.rows.keys()}
+                       for row_key, row_data in self.rows}
         return entity_dict
 
     class RowStatus:
@@ -471,10 +561,10 @@ class DBTable:
         row_key = DBTable.NEW_ID_PREFIX + DBManager.KEY_STR_DELIMITER + str(self.next_key)
         self.next_key += 1
         if fields_dict is None:
-            self.rows[row_key] = {field:None for field in self.fields_list()}
+            self.rows[row_key] = {field:None for field in self.fields}
         else:
             self.rows[row_key] = {field:fields_dict[field]
-                                  for field in self.fields_list()}
+                                  for field in self.fields}
         self.row_status[row_key] = DBTable.RowStatus.NEW
         return row_key
 
@@ -525,12 +615,23 @@ class DBEntity:
     object.
     """
     def __init__(self, db_table, row_key=0, fields_dict=None):
-        self.db_table = db_table
+        self.__dict__['db_table'] = db_table
         if row_key:
             self.row_key = row_key
             self.db_table.get_row_by_key(row_key)
         else:
             self.row_key = self.db_table.create_new_row(fields_dict)
+
+    def __getattr__(self, attr_name):
+        if attr_name in self.db_table.fields:
+            return self.get_field(attr_name)
+        raise AttributeError(attr_name + ' not in DBTable.fields.')
+
+    def __setattr__(self, attr_name, value):
+        if attr_name in self.db_table.fields:
+            self.set_field(attr_name, value)
+        else:
+            self.__dict__[attr_name] = value
 
     def get_field(self, field_name):
         """
@@ -576,9 +677,14 @@ def unit_test():
 
     print(">>> db.insert_row(%s, {'last_name': 'Thicke', 'given_names': 'Mike'})"
           % db_table_list[0])
-    db.insert_row(db_table_list[0], {'last_name': 'Thicke', 'given_names': 'Mike'})
+    new_key = db.insert_row(db_table_list[0], {'last_name': 'Thicke', 'given_names': 'Mike'})
+    print(">>> db.update_row(%s, %s, %s)" %
+          (db_table_list[0], new_key, {'given_names': 'Michael Lowell Ellis'}))
+    db.update_row(db_table_list[0],
+                  new_key,
+                  {'given_names': 'Michael Lowell Ellis'})
     print(">>> db.fetch_row(%s, {'last_name': 'Thicke'})" % db_table_list[0])
-    row = db.fetch_row(db_table_list[0], {'last_name': 'Thicke'})
+    row = db.fetch_rows(db_table_list[0], {'last_name': 'Thicke'})
     pp.pprint(row)
     print(">>> rows = db.fetch_rows('%s', {'last_name': 'NOT NULL'}, 20)" % db_table_list[0])
     rows = db.fetch_rows(db_table_list[0], {'last_name': 'NOT NULL'}, 20)
@@ -589,6 +695,17 @@ def unit_test():
     print(">>> a_db_table = DBTable(db, '%s')" % db_table_list[0])
     a_db_table = DBTable(db, db_table_list[0])
     print(a_db_table)
+    print(">>> a_db_table.insert_row({'last_name': 'Thicke', "
+          + "'given_names': 'Mira Ellis Hoffman'})")
+    mira_key = a_db_table.insert_row({'last_name': 'Thicke',
+                                      'given_names': 'Mira Ellis Hoffman'})
+    thicke_rows = a_db_table.fetch_rows({'last_name': 'Thicke'})
+    pp.pprint(thicke_rows)
+
+    print(">>> a_db_table.delete_row(%s)" % (new_key))
+    a_db_table.delete_row(new_key)
+    row = db.fetch_rows(db_table_list[0], {'last_name': 'Thicke'})
+    pp.pprint(row)
     print("List of existing keys: %s" % db.existing_table_object_keys())
     print(">>> all_table_objects = db.get_table_objects()")
     all_table_objects = db.get_table_objects()
@@ -599,6 +716,21 @@ def unit_test():
         duplicate_db_table = DBTable(db, db_table_list[0])
     except AssertionError as e:
         print(e)
+
+    print("\n***Testing DBEntity***\n")
+    print(">>> mira_author = a_db_table.entity_from_row(%s)" % (mira_key,))
+    mira_author = a_db_table.entity_from_row(mira_key)
+    mira_author.orcid = "a1a1a1"
+    print("%s, %s: %s" % (mira_author.last_name, mira_author.given_names, mira_author.orcid))
+    print(">>> mira_author.given_names = 'Mira Ellis'")
+    mira_author.given_names = "Mira Ellis"
+    print(">>> mira_author.last_name = 'Hoffman Thicke'")
+    mira_author.last_name = "Hoffman Thicke"
+    print("%s, %s: %s" % (mira_author.last_name, mira_author.given_names, mira_author.orcid))
+    print(">>> a_db_table.delete_row(mira_author.row_key)")
+    a_db_table.delete_row(mira_author.row_key)
+
+    db.delete_rows(db_table_list[0], {'last_name':'Thicke'})
 
     print(">>> db.close()")
     db.close()
