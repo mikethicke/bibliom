@@ -251,6 +251,37 @@ class DBManager:
                 key_list.append(field)
         return key_list
 
+    def foreign_key_list(self, table_name):
+        """
+        Returns a list of foreign keys.
+
+        Args:
+            table_name (str): The name of the source table
+        Returns:
+            List of dicts, where each list item corresponds to a foreign key,
+            and dictionary fields are:
+                column_name: name of column in table_name containing foreign key.
+                referenced_table_name: name of referenced table.
+                referenced_column_name: name of referenced column.
+        """
+        query = ("SELECT COLUMN_NAME, REFERENCED_COLUMN_NAME, REFERENCED_TABLE_NAME "
+                 + "FROM INFORMATION_SCHEMA.KEY_COLUMN_USAGE "
+                 + "WHERE TABLE_NAME = %s "
+                 + "AND REFERENCED_TABLE_NAME IS NOT NULL "
+                 + "AND TABLE_SCHEMA = %s")
+        try:
+            cursor = self.db.cursor(MySQLdb.cursors.DictCursor)
+            cursor.execute(query, (table_name, self.name))
+            results = cursor.fetchall()
+        except MySQLdb.Error as e:
+            print("DBManager.foreign_key_list: %s" % (e,))
+            return []
+        key_list = [{'column_name':item['COLUMN_NAME'],
+                     'referenced_table_name':item['REFERENCED_TABLE_NAME'],
+                     'referenced_column_name':item['REFERENCED_COLUMN_NAME']}
+                    for item in results]
+        return key_list
+
     def table_fields(self, table_name):
         """
         Returns list of fields in table_name.
@@ -431,6 +462,13 @@ class DBManager:
         raise ValueError("DBManager.delete_row must be called with primary" +
                          " key of row to be deleted")
 
+    def sync_to_db(self):
+        """
+        Sync all tables to database.
+        """
+        for table in self.dbtables:
+            table.sync_to_db()
+
 class DBTable:
     """
     Class representing a table in database. Each DBTable is associated with
@@ -487,6 +525,18 @@ class DBTable:
         row = self.manager.fetch_row(self.table_name, DBManager.key_to_dict(row_key))
         self.rows[row_key] = row
         return self.rows[row_key]
+
+    def get_row_by_primary_key(self, primary_key):
+        """
+        Returns a row dictionary where the row's key is created from the primary key.
+        Only works for tables with a single-column primary key.
+        """
+        key_cols = self.manager.primary_key_list(self.table_name)
+        if len(key_cols) != 1:
+            raise AttributeError("DBTable.get_row_by_primary_key: can only be "
+                                 + "called for a table with a single primary key column.")
+        row_key = self.manager.dict_to_key({key_cols[0]:primary_key})
+        return self.get_row_by_key(row_key)
 
     def insert_row(self, row_dict):
         """
@@ -614,8 +664,12 @@ class DBEntity:
     with a DBTable object and conducts all database transactions through that
     object.
     """
-    def __init__(self, db_table, row_key=0, fields_dict=None):
+    def __init__(self,
+                 db_table,
+                 row_key=0,
+                 fields_dict=None):
         self.__dict__['db_table'] = db_table
+
         if row_key:
             self.row_key = row_key
             self.db_table.get_row_by_key(row_key)
@@ -632,6 +686,22 @@ class DBEntity:
             self.set_field(attr_name, value)
         else:
             self.__dict__[attr_name] = value
+
+    @classmethod
+    def entities_from_table_rows(cls, db_table, rows):
+        """
+        Returns a list of entities from db_table corresponding to rows.
+        """
+        entities = [cls(db_table=db_table, row_key=key) for key in rows.keys()]
+        return entities
+
+    @classmethod
+    def fetch_entities(cls, db_table, where_dict):
+        """
+        Returns a list of entities from db_table matching where_dict.
+        """
+        rows = db_table.fetch_rows(where_dict)
+        return cls.entities_from_table_rows(db_table, rows)
 
     def get_field(self, field_name):
         """
@@ -670,6 +740,9 @@ def unit_test():
     print(">>> a_table_structure = db.table_structure('%s')" % db_table_list[0])
     a_table_structure = db.table_structure(db_table_list[0])
     pp.pprint(a_table_structure)
+    print(">>> paper_foreign_keys = db.foreign_key_list('paper')")
+    paper_foreign_keys = db.foreign_key_list('paper')
+    pp.pprint(paper_foreign_keys)
 
     print(">>> table_field_list = db.table_fields('%s')" % db_table_list[0])
     table_field_list = db.table_fields(db_table_list[0])

@@ -2,6 +2,12 @@
 	"folders": [
 		{
 			"path": "."
+		},
+		{
+			"path": "/Users/mikethicke/GitHub/webofscience"
+		},
+		{
+			"path": "/Users/mikethicke/GitHub/escs_db"
 		}
 	],
 	"settings": {
