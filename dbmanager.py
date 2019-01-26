@@ -41,7 +41,6 @@ class DBManager:
         Returns:
             (where_clause (str), value_list)
         """
-
         value_list = []
         if where_dict is None:
             return ("1", [])
@@ -462,11 +461,28 @@ class DBManager:
         raise ValueError("DBManager.delete_row must be called with primary" +
                          " key of row to be deleted")
 
+    def import_dict(self, db_dict):
+        """
+        Imports a dict of dicts into database.
+
+        Args:
+            db_dict (dict([dict])): Outer dict is indexed by table name and 
+                                     inner dict is indexed by column name.
+        """
+        for table_name, table_dict in db_dict:
+            self.dbtables[table_name].add_rows(table_dict)
+
+    def clear_table(self, table_name):
+        """
+        Delete all rows from table_name.
+        """
+        self.delete_rows(table_name, "1")
+
     def sync_to_db(self):
         """
         Sync all tables to database.
         """
-        for table in self.dbtables:
+        for table in self.dbtables.values():
             table.sync_to_db()
 
 class DBTable:
@@ -618,6 +634,16 @@ class DBTable:
         self.row_status[row_key] = DBTable.RowStatus.NEW
         return row_key
 
+    def add_rows(self, rows):
+        """
+        Adds new rows from list of fields dicts or dict of fields dicts.
+        """
+        if isinstance(rows, dict):
+            rows = rows.values()
+        
+        for row in rows:
+            self.crete_new_row(row)
+
     def set_field(self, row_key, field_name, field_value):
         """
         Sets the value of a field in a row. If row's status is SYNCED, set
@@ -702,6 +728,14 @@ class DBEntity:
         """
         rows = db_table.fetch_rows(where_dict)
         return cls.entities_from_table_rows(db_table, rows)
+
+    @classmethod
+    def fetch_entity(cls, db_table, where_dict):
+        """
+        Returns a single entity from db_table matching where_dict.
+        """
+        entity_list = cls.fetch_entities(db_table, where_dict)
+        return entity_list[0]
 
     def get_field(self, field_name):
         """
