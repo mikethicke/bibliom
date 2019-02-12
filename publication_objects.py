@@ -1,6 +1,8 @@
 """
 This module implements publication objects for a bibliometric database.
 """
+import re
+
 from dbmanager import DBEntity
 
 class Paper(DBEntity):
@@ -11,6 +13,8 @@ class Paper(DBEntity):
         if db_table is None:
             db_table = db_manager.get_table_object('paper')
         super().__init__(db_table=db_table, row_key=row_key, fields_dict=fields_dict)
+
+        self.was_retracted = False
 
     def __str__(self):
         return "%s (%s)" % (str(self.title), str(self.doi))
@@ -60,6 +64,13 @@ class Paper(DBEntity):
         citing_papers = [Paper.fetch_entity(self.db_table, {'idpaper':c.source_id})
                          for c in citations]
         return citing_papers
+    
+    def cite(self, target):
+        """
+        Create a citation from self to target paper.
+        """
+        new_citation = Citation(db_manager=self.db_table.manager)
+        new_citation.cite(self, target)
 
 class Author(DBEntity):
     """
@@ -72,6 +83,21 @@ class Author(DBEntity):
 
     def __str__(self):
         return "%s, %s" % (str(self.last_name), str(self.given_names))
+
+    @classmethod
+    def from_string(cls, db_table, author_str):
+        """
+        Creates an author from a string.
+        """
+        new_author = cls(db_table)
+        m = re.match(r'(.*), (.*)', author_str)
+        if m is not None:
+            new_author.last_name = m.group(1)
+            new_author.given_names = m.group(2)
+        else:
+            new_author.last_name = author_str
+        return new_author
+
 
     def papers(self):
         """
@@ -167,7 +193,6 @@ def unit_test():
     database_user = "test_user"
     database_password = "jfYf2NoJr4DMHrF,3b"
     db = DBManager(database_name, database_user, database_password)
-    db.connect()
     paper_table = db.get_table_object('paper')
     paper_rows = paper_table.fetch_rows(limit=10)
     papers = Paper.entities_from_table_rows(paper_table, paper_rows)

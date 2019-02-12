@@ -3,8 +3,10 @@ Module for interfacing with MySQL database. Meant to be generic, so doesn't
 assume anything about what tables, etc. are in the database. Project-specific
 customizations should be done in another modue.
 """
+import logging
 import re
 import MySQLdb
+import exceptions
 
 class DBManager:
     """
@@ -13,19 +15,64 @@ class DBManager:
     class. This should maximize portability.
     """
 
-    KEY_STR_DELIMITER = "%%"
-
-    def __init__(self, name=None, user=None, password=None):
+    def __init__(self, name=None, user=None, password=None, charset="utf8mb4", use_unicode=True):
         self.name = name
         self.user = user
         self.password = password
 
+        self.charset = charset
+        self.use_unicode = use_unicode
         self.db = None
+
+        self._connect()
 
         self.dbtables = {}
 
+    def __del__(self):
+        self._close()
+
     def __str__(self):
         return self.name
+
+    def _connect(self):
+        """
+        Connect to the database.
+        """
+        if (self.user is not None
+                and self.password is not None
+                and self.name is not None):
+            logging.getLogger(__name__).debug(
+                "Connecting to database %s as %s", self.user, self.password)
+            try:
+                self.db = MySQLdb.connect("localhost",
+                                          self.user,
+                                          self.password,
+                                          self.name,
+                                          charset=self.charset,
+                                          use_unicode=self.use_unicode)
+            except MySQLdb.Error as e:
+                logging.getLogger(__name__).exception("Failed to connect to database.")
+                #Unknown database
+                if e.args[0] == 1049:
+                    raise exceptions.UnknownDatabaseError("Database %s not found", self.name)
+                else:
+                    raise
+            else:
+                logging.getLogger(__name__).debug("Successfully connected to database.")
+
+    def _close(self):
+        """
+        Close database connection.
+        """
+        if self.db is not None:
+            try:
+                self.db.close()
+                self.db = None
+            except (MySQLdb.Error, MySQLdb.Warning):
+                logging.getLogger(__name__).exception("Failed to close database connection.")
+            else:
+                logging.getLogger(__name__).debug("Closed database connection.")
+
 
     @staticmethod
     def _build_where(where_dict=None, or_clause=False):
@@ -99,7 +146,7 @@ class DBManager:
                 value_list.append(where_value)
 
         return (where, value_list)
-
+    
     @staticmethod
     def _query_params(param_dictionary):
         """
@@ -144,54 +191,85 @@ class DBManager:
                     'where_or_clause'    : where_or_clause}
         return None
 
-    @staticmethod
-    def dict_to_key(key_dict):
+    def create_database(self, name=None, sql_source_file=None):
         """
-        Generates a key string from a dict of column:value.
+        Creates a new database and connects to it.
         """
-        key_str = DBManager.KEY_STR_DELIMITER.join(key_dict.keys())
-        key_str += (DBManager.KEY_STR_DELIMITER
-                    + DBManager.KEY_STR_DELIMITER.join(
-                        [str(i) for i in key_dict.values()]))
-        return key_str
+        if name is None:
+            name = self.name
+        if name is None:
+            raise AttributeError("Create database requires database name.")
+        
+        if self.user is None or self.password is None:
+            raise AttributeError("User and password must be set before creating database.")
+        
+        if sql_source_file is None:
+            sql_source_file = "create_db_tables.sql"
+        try:
+            with open(sql_source_file, 'r') as f:
+                sql_source = f.read()
+            sql_commands = sql_source.split(';')
+            sql_commands = [cmd.strip('\n') for cmd in sql_commands]
+        except IOError:
+            logging.getLogger(__name__).exception("Could not read file %s", sql_source_file)
+            raise
 
-    @staticmethod
-    def key_to_dict(key):
-        """
-        Generates a dictionary of column:value from key.
-        """
-        if isinstance(key, dict):
-            return key
-        key_list = str(key).split(DBManager.KEY_STR_DELIMITER)
-        key_length = len(key_list) // 2
-        dict_keys = key_list[:key_length]
-        dict_values = key_list[key_length:]
-        key_dict = {dict_keys[i]:dict_values[i] for i in range(0, key_length)}
-        return key_dict
+        if self.db is not None:
+            self._close()
 
-    def connect(self, charset="utf8mb4", use_unicode=True):
-        """
-        Connect to the database.
-        """
-        if (self.user is not None
-                and self.password is not None
-                and self.name is not None):
-            self.db = MySQLdb.connect("localhost",
+        query = "CREATE DATABASE %s" % name
+
+        try:
+            temp_db = MySQLdb.connect("localhost",
                                       self.user,
                                       self.password,
-                                      self.name,
-                                      charset=charset,
-                                      use_unicode=use_unicode)
+                                      charset=self.charset,
+                                      use_unicode=self.use_unicode)
+        except MySQLdb.Error:
+            logging.getLogger(__name__).exception("Error connecting to database server.")
+            raise
 
-    def close(self):
+        try:
+            cursor = temp_db.cursor()
+            cursor.execute(query)
+        except MySQLdb.Error:
+            logging.getLogger(__name__).exception(
+                "Error attempting to create new database with name %s", name)
+            temp_db.close()
+            raise
+        
+        try:
+            query = "USE %s" % name
+            cursor.execute(query)
+            for command in sql_commands:
+                if command:
+                    cursor.execute(command)
+            created_tables = True
+        except MySQLdb.Error:
+            logging.getLogger(__name__).exception("Error creating database tables.")
+            created_tables = False
+
+        if not created_tables:
+            query = "DROP DATABASE %s" % name
+            cursor.execute(query)
+            raise exceptions.FailedDatabaseCreationError("Failed to create database tables.")
+
+        temp_db.close()
+        self.name = name          
+        self._connect()
+    
+    def reset_database(self, sql_source_file=None):
         """
-        Close database connection.
+        Drops database and re-creates.
         """
-        if self.db is not None:
-            try:
-                self.db.close()
-            except (MySQLdb.Error, MySQLdb.Warning) as e:
-                print("DBManager.close: %s" % (e,))
+        query = "DROP DATABASE %s" % self.name
+        cursor = self.db.cursor()
+        try:
+            cursor.execute(query)
+        except MySQLdb.Error:
+            logging.getLogger(__name__).exception("Error dropping database %s" % self.name)
+            raise
+        self.create_database(self.name, sql_source_file)
 
     def list_tables(self):
         """
@@ -328,7 +406,8 @@ class DBManager:
         try:
             cursor.execute(query, value_list)
         except MySQLdb.Error as e:
-            print("DBManager.fetch_row: %s" % (e,))
+            logging.getLogger(__name__).exception(
+                "Failed to fetch row. Query: %s Error: %s", query, e)
             return []
         result = cursor.fetchone()
         return result
@@ -355,16 +434,18 @@ class DBManager:
         try:
             cursor.execute(query, value_list)
         except MySQLdb.Error as e:
-            print("DBManager.fetch_rows: %s" % (e,))
+            logging.getLogger(__name__).exception(
+                "Failed to fetch rows. Query: %s Error: %s", query, e)
+            raise
         results = cursor.fetchall()
         primary_keys = self.primary_key_list(table_name)
         rows_dict = {}
         for result in results:
-            key_str = DBManager.dict_to_key({key:result[key] for key in primary_keys})
+            key_str = DBTable.dict_to_key({key:result[key] for key in primary_keys})
             rows_dict[key_str] = result
         return rows_dict
-
-    def insert_row(self, table_name, row_dict):
+    
+    def insert_row(self, table_name, row_dict, duplicates=None):
         """
         Inserts a row into table.
 
@@ -378,18 +459,64 @@ class DBManager:
         params = DBManager._query_params(row_dict)
         query = ("INSERT INTO %s (%s) VALUES (%s)"
                  % (table_name, params['key_str'], params['value_alias']))
+        logging.getLogger(__name__).debug(
+            "Inserting row into database. Query: %s", query)
+        duplicate_entry = False
         try:
             cursor = self.db.cursor()
             cursor.execute(query, params['value_list'])
-            self.db.commit()
+            self.db.commit()   
         except MySQLdb.Error as e:
-            print("DBManager.insert_row: %s" % (e,))
             self.db.rollback()
-            return False
+            if e.args[0] == 1062: #Duplicate entry
+                raise
+            else:
+                logging.getLogger(__name__).exception(
+                    "Failed to insert row. Query: %s Error: %s", query, e)
+                raise
+
         lastrowid = cursor.lastrowid
         if not lastrowid:
             lastrowid = -1
-        return self.primary_key_list(table_name)[0] + DBManager.KEY_STR_DELIMITER + str(lastrowid)
+        return lastrowid
+
+    def insert_many_rows(self, table_name, row_dict_list):
+        """
+        Inserts many rows into a table.
+
+        Args:
+            table_name (str): Name of table for insertion
+            row_dict_list [{column:value}]:
+                List of row dicts. Each dict must have the same set of
+                column:value pairs.
+
+        Returns: True if successful, False otherwise. Note: does not return
+                 primary keys of inserted rows, so there is no way to directly
+                 track the inserted rows. They must be retrieved in a seperate
+                 query.
+        """
+        try:
+            params = DBManager._query_params(row_dict_list[0])
+        except (IndexError, KeyError):
+            logging.getLogger(__name__).exception(
+                "row_dict_list must be list of dicts of column:value pairs.")
+            raise AttributeError
+        query = ("INSERT INTO %s (%s) VALUES (%s)"
+                 % (table_name, params['key_str'], params['value_alias']))
+        logging.getLogger(__name__).debug(
+            "Inserting %d rows into table %s. Query: %s",
+            len(row_dict_list), table_name, query)
+        rows_lists = [rd.values() for rd in row_dict_list]
+        try:
+            cursor = self.db.cursor()
+            cursor.executemany(query, rows_lists)
+            self.db.commit()
+        except MySQLdb.Error as e:
+            logging.getLogger(__name__).exception(
+                "Failed to insert rows. Query: %s Error: %s", query, str(e))
+            self.db.rollback()
+            return False
+        return True
 
     def update_rows(self, table_name, row_dict, where_dict):
         """
@@ -406,13 +533,16 @@ class DBManager:
                  (table_name,
                   params['update_str'],
                   where_clause))
+        logging.getLogger(__name__).debug(
+            "Updating rows in database. Query: %s", query)
         try:
             cursor = self.db.cursor()
             cursor.execute(query, params['value_list'] + where_values)
             self.db.commit()
             return True
         except MySQLdb.Error as e:
-            print("DBManager.update_row: %s" % (e,))
+            logging.getLogger(__name__).exception(
+                "Failed to update row. Query: %s Error %s", query, str(e))
             self.db.rollback()
             return False
 
@@ -428,7 +558,7 @@ class DBManager:
         Returns:
             True if successful, False otherwise.
         """
-        key_dict = DBManager.key_to_dict(key)
+        key_dict = DBTable.key_to_dict(key)
         return self.update_rows(table_name, row_dict, key_dict)
 
     def delete_rows(self, table_name, where_dict, or_clause=False):
@@ -437,13 +567,16 @@ class DBManager:
         """
         (where_clause, value_list) = DBManager._build_where(where_dict, or_clause)
         query = "DELETE FROM %s WHERE %s" % (table_name, where_clause)
+        logging.getLogger(__name__).debug(
+            "Deleting rows from database. Query: %s", query)
         try:
             cursor = self.db.cursor()
             cursor.execute(query, value_list)
             self.db.commit()
             return True
         except MySQLdb.Error as e:
-            print("DBManager.delete_rows: %s" % (e,))
+            logging.getLogger(__name__).exception(
+                "Failed to delete rows from database. Query: %s Error: %s", query, str(e))
             self.db.rollback()
             return False
 
@@ -455,7 +588,7 @@ class DBManager:
             table_name (str): Name of the table to delete from.
             key (str, int or dict): Primary key or key dict of row to delete.
         """
-        key_dict = DBManager.key_to_dict(key)
+        key_dict = DBTable.key_to_dict(key)
         if list(key_dict.keys()) == self.primary_key_list(table_name):
             return self.delete_rows(table_name, key_dict)
         raise ValueError("DBManager.delete_row must be called with primary" +
@@ -466,8 +599,8 @@ class DBManager:
         Imports a dict of dicts into database.
 
         Args:
-            db_dict (dict([dict])): Outer dict is indexed by table name and 
-                                     inner dict is indexed by column name.
+            db_dict (dict([dict])): Outer dict is indexed by table name and
+                                    inner dict is indexed by column name.
         """
         for table_name, table_dict in db_dict:
             self.dbtables[table_name].add_rows(table_dict)
@@ -482,6 +615,7 @@ class DBManager:
         """
         Sync all tables to database.
         """
+        logging.getLogger(__name__).debug("Syncing all tables to database.")
         for table in self.dbtables.values():
             table.sync_to_db()
 
@@ -501,12 +635,40 @@ class DBTable:
         self.manager.dbtables[table_name] = self
         self.rows = {}
         self.row_status = {}
+        self.entites = {}
         self.next_key = 0
         self.fields = self.manager.table_fields(self.table_name)
 
     def __str__(self):
         return "%s|%s" % (self.manager, self.table_name)
 
+    KEY_STR_DELIMITER = "%%"
+
+    @staticmethod
+    def dict_to_key(key_dict):
+        """
+        Generates a key string from a dict of column:value.
+        """
+        key_str = DBTable.KEY_STR_DELIMITER.join(key_dict.keys())
+        key_str += (DBTable.KEY_STR_DELIMITER
+                    + DBTable.KEY_STR_DELIMITER.join(
+                        [str(i) for i in key_dict.values()]))
+        return key_str
+
+    @staticmethod
+    def key_to_dict(key):
+        """
+        Generates a dictionary of column:value from key.
+        """
+        if isinstance(key, dict):
+            return key
+        key_list = str(key).split(DBTable.KEY_STR_DELIMITER)
+        key_length = len(key_list) // 2
+        dict_keys = key_list[:key_length]
+        dict_values = key_list[key_length:]
+        key_dict = {dict_keys[i]:dict_values[i] for i in range(0, key_length)}
+        return key_dict
+    
     def table_structure(self):
         """
         Returns structure of table as dictionary of fields.
@@ -538,7 +700,7 @@ class DBTable:
         """
         if row_key in self.rows.keys():
             return self.rows[row_key]
-        row = self.manager.fetch_row(self.table_name, DBManager.key_to_dict(row_key))
+        row = self.manager.fetch_row(self.table_name, DBTable.key_to_dict(row_key))
         self.rows[row_key] = row
         return self.rows[row_key]
 
@@ -551,10 +713,22 @@ class DBTable:
         if len(key_cols) != 1:
             raise AttributeError("DBTable.get_row_by_primary_key: can only be "
                                  + "called for a table with a single primary key column.")
-        row_key = self.manager.dict_to_key({key_cols[0]:primary_key})
+        row_key = self.dict_to_key({key_cols[0]:primary_key})
         return self.get_row_by_key(row_key)
 
-    def insert_row(self, row_dict):
+    class Duplicates:
+        """
+        How to handle duplicate entries when inserting rows.
+
+        SKIP: Skip inserting the row, leaving original entry unchanged.
+        MERGE: New values overwrite old values but unset fields in new row left unchanged.
+        OVERWRITE: Old row is dropped and new row inserted in its place.
+        """
+        SKIP = 1
+        MERGE = 2
+        OVERWRITE = 3
+    
+    def insert_row(self, row_dict, duplicates=None):
         """
         Inserts a row into table.
 
@@ -564,7 +738,86 @@ class DBTable:
         Returns:
             If successful, lastrowid if available, -1 otherwise. False otherwise
         """
-        return self.manager.insert_row(self.table_name, row_dict)
+        if duplicates == None:
+            duplicates = DBTable.Duplicates.SKIP
+        
+        try:
+            new_pri_key = self.manager.insert_row(self.table_name, row_dict)
+            duplicate_entry = False
+        except MySQLdb.IntegrityError as e:
+            if e.args[0] == 1062: #Duplicate entry
+                m = re.match('Duplicate entry \'(.*)\' for key', e.args[1])
+                if m is not None:
+                    duplicate_value = m.group(1)
+                duplicate_entry = True
+            else:
+                raise
+
+        if duplicate_entry:
+            duplicate_key = None
+            for key, value in row_dict.items():
+                if value == duplicate_value:
+                    duplicate_key = key
+                    break
+            if duplicate_key:
+                old_entity = DBEntity.fetch_entity(self, {duplicate_key:duplicate_value})
+            else:
+                old_entity = DBEntity.fetch_entity(self, row_dict)
+                if old_entity:
+                    return old_entity.row_key
+                else:
+                    return None
+            if duplicates == self.Duplicates.SKIP:
+                return old_entity.row_key
+            elif duplicates == self.Duplicates.OVERWRITE:
+                self.delete_row(old_entity.row_key)
+                return self.insert_row(row_dict, duplicates)
+            elif duplicates == self.Duplicates.MERGE:
+                for key, value in row_dict.items():
+                    if not value:
+                        del(row_dict[key])
+                if self.update_row(old_entity.row_key, row_dict):
+                    self.row_status[old_entity.row_key] = DBTable.RowStatus.SYNCED
+                return old_entity.row_key
+            else:
+                raise AttributeError("Parameter 'duplicates' has unknown value.")
+        else:
+            pkl = self.manager.primary_key_list(self.table_name)
+            if new_pri_key > 0 and len(pkl) == 1:
+                # Row inserted successfully and primary key returned
+                new_row_key = DBTable.dict_to_key({pkl[0]:new_pri_key})
+                row_dict[pkl[0]] = new_pri_key
+            elif new_pri_key == -1:
+                # Row inserted successfuly, but no AUTO INCRIMENT primary key
+                # so primary key must be a subset of row_dict.
+                new_key_dict = {key:row_dict[key]
+                                for key in self.manager.primary_key_list(self.table_name)}
+                new_row_key = DBTable.dict_to_key(new_key_dict)
+            else:
+                raise RuntimeError('In DBTable.sync_to_db: Primary key is ' +
+                                    'neither AUTO INCRIMENT nor subset of row_dict.')
+            self.rows[new_row_key] = row_dict
+            self.row_status[new_row_key] = DBTable.RowStatus.SYNCED
+            return new_row_key
+
+    def insert_many_new_rows(self):
+        """
+        Inserts all new rows into database and then deletes them.
+
+        This should be used to insert many new rows when sync_to_db would be
+        inefficient. The rows are then deleted from self.rows because the
+        primary keys for the new rows will not be known. If a DBEntity
+        references a deleted row, it will raise an exception.
+        """
+        new_keys = [key for key, value in self.row_status.items()
+                    if value == self.RowStatus.NEW]
+        new_rows = [row for key, row in self.rows.items() if key in new_keys]
+        if self.manager.insert_many_rows(self.table_name, new_rows):
+            for key in new_keys:
+                del self.row_status[key]
+                del self.rows[key]
+            return True
+        return False
 
     def update_row(self, row_key, row_dict):
         """
@@ -624,7 +877,7 @@ class DBTable:
         Adds a new row to self.rows and returns the key for that
         row. Row not added to database until table is synced.
         """
-        row_key = DBTable.NEW_ID_PREFIX + DBManager.KEY_STR_DELIMITER + str(self.next_key)
+        row_key = DBTable.NEW_ID_PREFIX + DBTable.KEY_STR_DELIMITER + str(self.next_key)
         self.next_key += 1
         if fields_dict is None:
             self.rows[row_key] = {field:None for field in self.fields}
@@ -640,9 +893,8 @@ class DBTable:
         """
         if isinstance(rows, dict):
             rows = rows.values()
-        
         for row in rows:
-            self.crete_new_row(row)
+            self.create_new_row(row)
 
     def set_field(self, row_key, field_name, field_value):
         """
@@ -656,33 +908,25 @@ class DBTable:
     def sync_to_db(self):
         """
         Updates db from self.rows, and sets all row statuses to SYNCED.
+
+        Returns row_key of last new inserted row.
         """
-        for row_key, row_dict in self.rows.items():
+        new_row_key = None
+        row_keys = list(self.rows.keys())
+        for row_key in row_keys:
+            row_dict = self.rows[row_key]
             if self.row_status[row_key] == DBTable.RowStatus.NEW:
-                new_pri_key = self.manager.insert_row(self.table_name, row_dict)
-                pkl = self.manager.primary_key_list(self.table_name)
-                if new_pri_key > 0 and len(pkl) == 1:
-                    # Row inserted successfully and primary key returned
-                    new_row_key = DBManager.dict_to_key({pkl[0]:new_pri_key})
-                elif new_pri_key == -1:
-                    # Row inserted successfuly, but no AUTO INCRIMENT primary key
-                    # so primary key must be a subset of row_dict.
-                    new_key_dict = {key:row_dict[key]
-                                    for key in self.manager.primary_key_list(self.table_name)}
-                    new_row_key = DBManager.dict_to_key(new_key_dict)
-                else:
-                    raise RuntimeError('In DBTable.sync_to_db: Primary key is ' +
-                                       'neither AUTO INCRIMENT nor subset of row_dict.')
-                self.rows[new_row_key] = row_dict
+                new_row_key = self.insert_row(row_dict)
                 self.row_status[new_row_key] = DBTable.RowStatus.SYNCED
                 del self.rows[row_key]
             elif self.row_status[row_key] == DBTable.RowStatus.UNSYNCED:
                 if (self.manager.update_row(self.table_name,
-                                            DBManager.key_to_dict(row_key),
+                                            DBTable.key_to_dict(row_key),
                                             row_dict)):
                     self.row_status[row_key] = DBTable.RowStatus.SYNCED
                 else:
                     raise RuntimeError('In DBTable.sync_to_db: Row failed to update.')
+        return new_row_key
 
 class DBEntity:
     """
@@ -701,6 +945,9 @@ class DBEntity:
             self.db_table.get_row_by_key(row_key)
         else:
             self.row_key = self.db_table.create_new_row(fields_dict)
+        
+        if self.row_key not in db_table.entites.keys():
+            db_table.entites[row_key] = self
 
     def __getattr__(self, attr_name):
         if attr_name in self.db_table.fields:
@@ -736,6 +983,13 @@ class DBEntity:
         """
         entity_list = cls.fetch_entities(db_table, where_dict)
         return entity_list[0]
+    
+    @property
+    def fields_dict(self):
+        """
+        Returns dict of fields.
+        """
+        return self.db_table.get_row_by_key(self.row_key)
 
     def get_field(self, field_name):
         """
@@ -748,6 +1002,13 @@ class DBEntity:
         Sets the value of a field.
         """
         self.db_table.set_field(self.row_key, field_name, field_value)
+    
+    def save_to_db(self, duplicates=None):
+        """
+        Inserts entity into db and updates row_key.
+        """
+        new_row_key = self.db_table.insert_row(self.fields_dict, duplicates)
+        self.row_key = new_row_key
 
 def unit_test():
     """
@@ -763,9 +1024,6 @@ def unit_test():
     print(">>> db = DBManager('%s', '%s', '%s')"
           % (database_name, database_user, database_password))
     db = DBManager(database_name, database_user, database_password)
-
-    print(">>> db.connect()")
-    db.connect()
 
     print(">>> db_table_list = db.list_tables()")
     db_table_list = db.list_tables()
@@ -838,9 +1096,6 @@ def unit_test():
     a_db_table.delete_row(mira_author.row_key)
 
     db.delete_rows(db_table_list[0], {'last_name':'Thicke'})
-
-    print(">>> db.close()")
-    db.close()
 
 
 if __name__ == "__main__":

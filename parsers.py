@@ -7,6 +7,13 @@ objects directly.
 from abc import ABC, abstractmethod
 import os
 import re
+import chardet
+
+def detect_encoding(data):
+    """
+    Returns string containing (best guess of) text's encoding.
+    """
+    return chardet.detect(data)['encoding']
 
 class Parser(ABC):
     """
@@ -14,11 +21,105 @@ class Parser(ABC):
     Each parsed item is added to the parsed_items list. If an ID field is designated,
     parsed items are instead added to a dictionary indexed by that ID.
     """
-    def __init__(self, id_field=None, encoding='utf8'):
+    def __init__(self, id_field=None, encoding=None):
         self.parsed_list = []
         self.parsed_dict = {}
         self.id_field = id_field
         self.encoding = encoding
+
+    def __getattribute__(self, name):
+        if name == 'parsed_list':
+            if (not object.__getattribute__(self, 'parsed_list')
+                    and object.__getattribute__(self, 'parsed_dict')):
+                return list(object.__getattribute__(self, 'parsed_dict').values())
+            else:
+                return object.__getattribute__(self, 'parsed_list')
+        else:
+            return object.__getattribute__(self, name)
+
+    @staticmethod
+    def parser_classes():
+        """
+        Returns all classes that (directly) inherit from Parser.
+        """
+        return Parser.__subclasses__()
+
+    @staticmethod
+    def get_parser_for_content(content):
+        """
+        Returns a class capable of parsing content, or False if none found.
+        """
+        for parser_class in Parser.parser_classes():
+            if parser_class.is_parsable(content):
+                return parser_class
+        return False
+
+    @staticmethod
+    def get_parser_from_format_arg(format_arg):
+        """
+        Returns a parser class corresponding to formatting argument, or False
+        if none found.
+        """
+        for parser_class in Parser.parser_classes():
+            if parser_class.format_arg() == format_arg:
+                return parser_class
+        return False
+
+    @staticmethod
+    def get_parser_for_file(file_path):
+        """
+        Returns a class capable of parsing file, or False if none found.
+        """
+        for parser_class in Parser.parser_classes():
+            if parser_class.is_parsable_file(file_path):
+                return parser_class
+        return False
+    
+    @staticmethod
+    def get_parser_for_directory(directory_path):
+        """
+        Returns a class capable of parsing files in directory, or False if
+        none found.
+        """
+        files = os.listdir(directory_path)
+        if not str(directory_path).endswith('/'):
+            directory_path += '/'
+        for file_name in files:
+            if not file_name.startswith('.'):
+                parser_class = Parser.get_parser_for_file(directory_path + file_name)
+                if parser_class:
+                    return parser_class
+        return False
+
+
+    @classmethod
+    def is_parsable(cls, content):
+        """
+        Returns true if content is parsable by this class, false otherwise.
+        """
+        test_parser = cls()
+        try:
+            test_parser.parse_content_item(content)
+            if test_parser.parsed_list:
+                return True
+            else:
+                return False
+        except:
+            return False
+
+    @classmethod
+    def is_parsable_file(cls, file_path):
+        """
+        Returns true if file is parsable by this class, false otherwise.
+        """
+        return False
+
+    @staticmethod
+    @abstractmethod
+    def format_arg():
+        """
+        Returns a string containing the format argument corresponding to this class
+        """
 
     @abstractmethod
     def parse_content_item(self, content):
@@ -33,19 +134,13 @@ class Parser(ABC):
         Parses a text file containing publication items.
         """
 
-    @abstractmethod
-    def parse_url(self, url):
-        """
-        Parses content items found at a url, possibly by traversing through
-        links.
-        """
-
     def parse_files(self, file_paths):
         """
         Parses a list of files.
         """
         for file_path in file_paths:
-            self.parse_file(file_path)
+            if os.path.isfile(file_path):
+                self.parse_file(file_path)
 
     def parse_directory(self, directory_path):
         """
@@ -80,6 +175,13 @@ class WOKParser(Parser):
     """
     Parses Web of Knowledge / Web of Science files.
     """
+
+    @staticmethod
+    def format_arg():
+        """
+        Format argument code for class.
+        """
+        return 'WOK'
 
     #Map from Web of Knowledge field codes to more informative names.
     _field_tags = {
@@ -218,22 +320,32 @@ class WOKParser(Parser):
                       + "%s not found in parsed record" % self.id_field)
                 raise
         else:
-            self.parsed_list += record_dict
+            self.parsed_list.append(record_dict)
 
         return True
 
-    def parse_file(self, file_path):
-        with open(file_path, 'r', encoding=self.encoding) as f:
-            file_text = str(f.read())
-            valid_wos = False
-            for header in self._valid_headers:
+    @classmethod
+    def is_parsable_file(cls, file_path, encoding=None):
+        with open(file_path, 'rb') as f:
+            file_data = f.read()
+            if encoding == None:
+                encoding = detect_encoding(file_data)
+            file_text = file_data.decode(encoding)
+            for header in cls._valid_headers:
                 if file_text.startswith(header):
-                    valid_wos = True
-                    break
-            if valid_wos:
-                records = re.split(r'\n\s*ER\s*\n', file_text)
-            else:
-                return False
+                    return True
+        return False
+
+    def parse_file(self, file_path):
+        if not self.is_parsable_file(file_path):
+            #Should probably throw an exception instead?
+            return False
+        with open(file_path, 'rb') as f:
+            file_data = f.read()
+            if self.encoding == None:
+                self.encoding = detect_encoding(file_data)
+            file_text = file_data.decode(self.encoding)
+            records = re.split(r'\n\s*ER\s*\n', file_text)
 
         records = list(map(lambda x: x + '\nER', records))
 
@@ -243,9 +355,3 @@ class WOKParser(Parser):
             self.parse_content_item(record)
 
         return True
-
-    def parse_url(self, url):
-        """
-        WOK records are download-only.
-        """
-        raise NotImplementedError("WOK records cannot be parsed from urls.")
