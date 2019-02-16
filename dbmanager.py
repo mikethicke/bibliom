@@ -8,6 +8,12 @@ import re
 import MySQLdb
 import exceptions
 
+# Above this number of table rows, will log progress when syncing to db.
+INFO_THRESHOLD = 10000
+
+# Frequency to log progress when syncing to db.
+REPORT_FREQUENCY = 5000
+
 class DBManager:
     """
     Class for managing connection to MySQL database. All SQL should be
@@ -93,7 +99,7 @@ class DBManager:
             return ("1", [])
 
         if not isinstance(where_dict, dict):
-            raise TypeError("where_dict must be dictionary")
+            raise AttributeError("where_dict must be dictionary")
 
         where = ""
         conj = " OR " if or_clause else " AND "
@@ -199,10 +205,12 @@ class DBManager:
             name = self.name
         if name is None:
             raise AttributeError("Create database requires database name.")
-        
+
+        logging.getLogger(__name__).debug("Connecting to database %s", name)
+
         if self.user is None or self.password is None:
             raise AttributeError("User and password must be set before creating database.")
-        
+
         if sql_source_file is None:
             sql_source_file = "create_db_tables.sql"
         try:
@@ -257,7 +265,7 @@ class DBManager:
         temp_db.close()
         self.name = name          
         self._connect()
-    
+
     def reset_database(self, sql_source_file=None):
         """
         Drops database and re-creates.
@@ -444,7 +452,7 @@ class DBManager:
             key_str = DBTable.dict_to_key({key:result[key] for key in primary_keys})
             rows_dict[key_str] = result
         return rows_dict
-    
+
     def insert_row(self, table_name, row_dict, duplicates=None):
         """
         Inserts a row into table.
@@ -461,7 +469,6 @@ class DBManager:
                  % (table_name, params['key_str'], params['value_alias']))
         logging.getLogger(__name__).debug(
             "Inserting row into database. Query: %s", query)
-        duplicate_entry = False
         try:
             cursor = self.db.cursor()
             cursor.execute(query, params['value_list'])
@@ -500,7 +507,7 @@ class DBManager:
         except (IndexError, KeyError):
             logging.getLogger(__name__).exception(
                 "row_dict_list must be list of dicts of column:value pairs.")
-            raise AttributeError
+            raise AttributeError("row_dict_list must be list of dicts of column:value pairs.")
         query = ("INSERT INTO %s (%s) VALUES (%s)"
                  % (table_name, params['key_str'], params['value_alias']))
         logging.getLogger(__name__).debug(
@@ -591,8 +598,8 @@ class DBManager:
         key_dict = DBTable.key_to_dict(key)
         if list(key_dict.keys()) == self.primary_key_list(table_name):
             return self.delete_rows(table_name, key_dict)
-        raise ValueError("DBManager.delete_row must be called with primary" +
-                         " key of row to be deleted")
+        raise AttributeError("DBManager.delete_row must be called with primary" +
+                             " key of row to be deleted")
 
     def import_dict(self, db_dict):
         """
@@ -628,8 +635,9 @@ class DBTable:
 
     def __init__(self, manager, table_name):
         if table_name in manager.existing_table_object_keys():
-            raise AssertionError('Attempted to create a DBTable object, but one '
-                                 + ' already exists for this table and manager.')
+            raise exceptions.BiblioException(
+                'Attempted to create a DBTable object, but one '
+              + ' already exists for this table and manager.')
         self.manager = manager
         self.table_name = table_name
         self.manager.dbtables[table_name] = self
@@ -668,7 +676,7 @@ class DBTable:
         dict_values = key_list[key_length:]
         key_dict = {dict_keys[i]:dict_values[i] for i in range(0, key_length)}
         return key_dict
-    
+
     def table_structure(self):
         """
         Returns structure of table as dictionary of fields.
@@ -727,7 +735,7 @@ class DBTable:
         SKIP = 1
         MERGE = 2
         OVERWRITE = 3
-    
+
     def insert_row(self, row_dict, duplicates=None):
         """
         Inserts a row into table.
@@ -738,9 +746,9 @@ class DBTable:
         Returns:
             If successful, lastrowid if available, -1 otherwise. False otherwise
         """
-        if duplicates == None:
+        if duplicates is None:
             duplicates = DBTable.Duplicates.SKIP
-        
+
         try:
             new_pri_key = self.manager.insert_row(self.table_name, row_dict)
             duplicate_entry = False
@@ -794,8 +802,8 @@ class DBTable:
                                 for key in self.manager.primary_key_list(self.table_name)}
                 new_row_key = DBTable.dict_to_key(new_key_dict)
             else:
-                raise RuntimeError('In DBTable.sync_to_db: Primary key is ' +
-                                    'neither AUTO INCRIMENT nor subset of row_dict.')
+                raise exceptions.BiblioException(
+                    'Primary key is neither AUTO INCRIMENT nor subset of row_dict.')
             self.rows[new_row_key] = row_dict
             self.row_status[new_row_key] = DBTable.RowStatus.SYNCED
             return new_row_key
@@ -911,9 +919,10 @@ class DBTable:
 
         Returns row_key of last new inserted row.
         """
+        logging.getLogger(__name__).debug('Syncing table %s to db.', self.table_name)
         new_row_key = None
         row_keys = list(self.rows.keys())
-        for row_key in row_keys:
+        for count, row_key in enumerate(row_keys):
             row_dict = self.rows[row_key]
             if self.row_status[row_key] == DBTable.RowStatus.NEW:
                 new_row_key = self.insert_row(row_dict)
@@ -925,7 +934,13 @@ class DBTable:
                                             row_dict)):
                     self.row_status[row_key] = DBTable.RowStatus.SYNCED
                 else:
-                    raise RuntimeError('In DBTable.sync_to_db: Row failed to update.')
+                    raise exceptions.BiblioException('In DBTable.sync_to_db: Row failed to update.')
+            if len(row_keys) >= INFO_THRESHOLD and count % REPORT_FREQUENCY == 0:
+                logging.getLogger(__name__).verbose_info(
+                    "Synced %s / %s rows to db.",
+                    count,
+                    len(row_keys)
+                )
         return new_row_key
 
 class DBEntity:
@@ -952,7 +967,7 @@ class DBEntity:
     def __getattr__(self, attr_name):
         if attr_name in self.db_table.fields:
             return self.get_field(attr_name)
-        raise AttributeError(attr_name + ' not in DBTable.fields.')
+        raise exceptions.BiblioException(attr_name + ' not in DBTable.fields.')
 
     def __setattr__(self, attr_name, value):
         if attr_name in self.db_table.fields:

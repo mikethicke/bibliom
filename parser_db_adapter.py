@@ -6,24 +6,28 @@ which are both designed to be general purpose. This module adapts the dicts
 produced by parsers into database table rows.
 """
 import re
+import logging
 
 import parsers
 import dbmanager
 import publication_objects
 
+REPORT_FREQUENCY = 500
 
 def _wok_to_db(parser, manager, duplicates=None):
     """
     Adds records from Web of Science / Web of Knowledge parser
     to database.
     """
+    logging.getLogger(__name__).info("Importing Web of Knowledge records into database.")
     paper_table = manager.get_table_object('paper')
     author_table = manager.get_table_object('author')
     journal_table = manager.get_table_object('journal')
     paper_author_table = manager.get_table_object('paper_author')
     keyword_table = manager.get_table_object('paper_keyword')
     new_paper_list = []
-    for record in parser.parsed_list:
+    logging.getLogger(__name__).info("Importing %s records into database.", len(parser.parsed_list))
+    for count, record in enumerate(parser.parsed_list):
         new_journal = publication_objects.Journal(journal_table)
         new_journal.title = record.get('Publication Name')
         new_journal.issn = record.get('ISSN')
@@ -91,11 +95,19 @@ def _wok_to_db(parser, manager, duplicates=None):
             new_paper_author.idpaper = new_paper.idpaper
 
         new_paper_list.append(new_paper)
+        if count % REPORT_FREQUENCY == 0:
+            logging.getLogger(__name__).verbose_info(
+                "Imported %s / %s records.",
+                count,
+                len(parser.parsed_list))
 
+    logging.getLogger(__name__).info("Importing %s keywords.", len(keyword_table.rows))
     keyword_table.sync_to_db()
+    logging.getLogger(__name__).info("Importing %s paper authors.", len(paper_author_table.rows))
     paper_author_table.sync_to_db()
 
-    for new_paper in new_paper_list:
+    logging.getLogger(__name__).info("Parsing citations.")
+    for count, new_paper in enumerate(new_paper_list):
         cited_records = new_paper.cited_records.split(';')
         for record in cited_records:
             target_paper = publication_objects.Paper(paper_table)
@@ -109,6 +121,14 @@ def _wok_to_db(parser, manager, duplicates=None):
                 target_paper.doi = ref_doi_match.group(1)
                 target_paper.save_to_db()
                 new_paper.cite(target_paper)
+        if count % REPORT_FREQUENCY == 0:
+            logging.getLogger(__name__).verbose_info(
+                "Parsed citations for %s / %s papers.",
+                count,
+                len(new_paper_list))
+    logging.getLogger(__name__).info(
+        "Importing %s citations into db.",
+        len(manager.get_table_object('citation').rows))
     manager.get_table_object('citation').sync_to_db()
 
 

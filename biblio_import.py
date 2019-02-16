@@ -5,43 +5,54 @@ Import citation records located at file or directory or url into database. If
 no database is specified, use database from configuration file (bibiodb.cfg by
 default).
 
-Options:
+usage: biblio_import.py [-h] [-d DATABASE] [-u USER] [-p PASSWORD] [-r] [-c]
+                        [-o | -s | -m] [-v VERBOSE | -q QUIET] [-f {WOK}]
+                        [-g CONFIG] [-l [LOG]]
+                        file|directory
 
--d <name>   : Database name
--u <name>   : Database username
--p <pw>     : Database password
+Script for importing bibliographic records into an SQL database.
 
--c          : Clear all records before import (dangerous!)
--o          : Overwrite duplicates
--s          : Skip duplicates
--m          : Merge duplicates
+positional arguments:
+  file|directory        File or directory to parse and store in database.
 
--f <format> : Import records of <format> (see below). If no format is specified,
-              script will attempt to guess format from first record.
+optional arguments:
+  -h, --help            show this help message and exit
+  -d DATABASE, --database DATABASE
+                        Database name.
+  -u USER, --user USER  Database username.
+  -p PASSWORD, --password PASSWORD
+                        Database password.
+  -r, --recursive       Recursively parse directories
+  -c, --clear           Drop all records before import (dangerous!)
+  -o, --overwrite       Overwrite duplicate records.
+  -s, --skip            Skip duplicate records (default).
+  -m, --merge           Merge duplicate records.
+  -v, --verbose         Output detailed progress information to console.
+  -q, --quiet           Output no progress information to console.
+  -f {WOK}, --format {WOK}
+                        Import records matching format (see below).
+  -g CONFIG, --config CONFIG
+                        Use configuration file.
+  -l [LOG], --log [LOG]
+                        Log to file
 
--g <file>   : Use configuration file <file>
-
--l <file>   : Log to file
--v          : Verbose
--q          : Quiet
-
--h          : Print this help text.
-
-Formats:
+Available formats:
     WOK         : Web of Science / Web of Knowledge
     WOKCH       : Web of Science / Web of Knowldge citation history
     CR          : Crossref
 """
 
 import os
+import sys
 import argparse
 from textwrap import dedent
+import logging
 
+from bibliometrics_database import exceptions
 import parsers
 import dbmanager
 import settings
 import parser_db_adapter
-import exceptions
 
 def parse_args():
     """
@@ -99,11 +110,13 @@ def parse_args():
     verbosity = parser.add_mutually_exclusive_group()
     verbosity.add_argument(
         "-v", "--verbose",
-        help="Output detailed progress information to console."
+        help="Output detailed progress information to console.",
+        action="store_true"
     )
     verbosity.add_argument(
         "-q", "--quiet",
-        help="Output no progress information to console."
+        help="Output no progress information to console.",
+        action="store_true"
     )
     available_formats = [bparser.format_arg() for bparser in parsers.Parser.parser_classes()]
     parser.add_argument(
@@ -168,6 +181,19 @@ def main():
     Main program
     """
     options = resolve_options()
+
+    if not options['quiet']:
+        if options['verbose']:
+            level = logging.VERBOSE_INFO
+        else:
+            level = logging.INFO
+        logging.basicConfig(
+            stream=sys.stdout,
+            format="%(asctime)s - %(message)s",
+            datefmt="%H:%M:%S",
+            level=level
+        )
+
     if options['clear']:
         answer = input(
             "Delete ALL existing records from database? This cannot be undone."
@@ -195,6 +221,7 @@ def main():
             raise SystemExit
     
     if options['clear']:
+        logging.getLogger(__name__).info('Reseting database.')
         manager.reset_database()
     
     the_parser = get_parser(options)
@@ -209,6 +236,8 @@ def main():
     else:
         raise SystemExit
     
+    logging.getLogger(__name__).info('Parsed %s records.', len(the_parser.parsed_list))
+
     parser_db_adapter.parsed_records_to_db(the_parser, manager)
 
 

@@ -108,7 +108,7 @@ class Parser(ABC):
             return False
 
     @classmethod
-    def is_parsable_file(cls, file_path):
+    def is_parsable_file(cls, file_path, encoding=None):
         """
         Returns true if file is parsable by this class, false otherwise.
         """
@@ -328,7 +328,7 @@ class WOKParser(Parser):
     def is_parsable_file(cls, file_path, encoding=None):
         with open(file_path, 'rb') as f:
             file_data = f.read()
-            if encoding == None:
+            if encoding is None:
                 encoding = detect_encoding(file_data)
             file_text = file_data.decode(encoding)
             for header in cls._valid_headers:
@@ -342,7 +342,7 @@ class WOKParser(Parser):
             return False
         with open(file_path, 'rb') as f:
             file_data = f.read()
-            if self.encoding == None:
+            if self.encoding is None:
                 self.encoding = detect_encoding(file_data)
             file_text = file_data.decode(self.encoding)
             records = re.split(r'\n\s*ER\s*\n', file_text)
