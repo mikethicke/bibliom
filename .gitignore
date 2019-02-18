@@ -120,3 +120,5 @@ dmypy.json
 #macos
 .DS_Store
 
+#project
+planning/
