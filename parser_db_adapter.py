@@ -52,7 +52,7 @@ def _wok_to_db(parser, manager, duplicates=None):
         # Sample data:
         #
         #     RETRACTED: Two-dimensional nanosheets associated with one-dimensional single-
-        #     crystalline nanorods self-assembled into three-dimensional flower-like Mn3O4 
+        #     crystalline nanorods self-assembled into three-dimensional flower-like Mn3O4
         #     hierarchical architectures (Retracted article. See vol. 19, pg. 25222, 2017)
         #
         #     RETRACTED: Electrophysiological Evidence for Failures of Item Individuation in Crowded
@@ -73,14 +73,14 @@ def _wok_to_db(parser, manager, duplicates=None):
             if m.group(2) is not None:
                 new_paper.retracted_year = m.group(2)
             new_paper.was_retracted = True
-        
+
         new_paper.save_to_db(duplicates)
 
         for keyword in (record.get('Keywords') or []):
             new_keyword = dbmanager.DBEntity(keyword_table)
             new_keyword.keyword = keyword
             new_keyword.idpaper = new_paper.idpaper
-        
+
         if new_paper.was_retracted:
             new_keyword = dbmanager.DBEntity(keyword_table)
             new_keyword.keyword = 'retracted'

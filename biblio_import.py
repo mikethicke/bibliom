@@ -48,7 +48,7 @@ import argparse
 from textwrap import dedent
 import logging
 
-from bibliometrics_database import exceptions
+from bibliom import exceptions
 import parsers
 import dbmanager
 import settings
@@ -149,7 +149,7 @@ def resolve_options():
         config_file = None
     config_settings = settings.load_settings(config_file)
     if parsed_args.database and parsed_args.database in config_settings.sections():
-        config_section = parsed_args.database 
+        config_section = parsed_args.database
     else:
         config_section = 'DEFAULT'
     config_items = config_settings.items(config_section)
@@ -207,9 +207,11 @@ def main():
     except exceptions.UnknownDatabaseError:
         manager = None
         must_create_database = True
-    
+
     if must_create_database:
-        answer = input("Database %s not found. Create as new database (y/n)? " % options['database'])
+        answer = input(
+            "Database %s not found. Create as new database (y/n)? " %
+            options['database'])
         if answer.upper() == "Y" or answer.upper() == "YES":
             manager = dbmanager.DBManager(
                 name=None,
@@ -219,24 +221,31 @@ def main():
             manager.create_database(options['database'])
         else:
             raise SystemExit
-    
+
     if options['clear']:
         logging.getLogger(__name__).info('Reseting database.')
         manager.reset_database()
-    
+
     the_parser = get_parser(options)
 
+    logging.getLogger(__name__).info('Parsing records.')
+
     if os.path.isfile(options['target']):
+        logging.getLogger(__name__).verbose_info('Parsing file %s.', options['target'])
         the_parser.parse_file(options['target'])
     elif os.path.isdir(options['target']):
         if options['recursive']:
+            logging.getLogger(__name__).verbose_info(
+                'Recursively parsing directory %s.',
+                options['target'])
             the_parser.recursive_parse(options['target'])
         else:
+            logging.getLogger(__name__).verbose_info('Parsing directory %s.', options['target'])
             the_parser.parse_directory(options['target'])
     else:
         raise SystemExit
-    
-    logging.getLogger(__name__).info('Parsed %s records.', len(the_parser.parsed_list))
+
+    logging.getLogger(__name__).verbose_info('Parsed %s records.', len(the_parser.parsed_list))
 
     parser_db_adapter.parsed_records_to_db(the_parser, manager)
 

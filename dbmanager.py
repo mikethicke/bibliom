@@ -6,7 +6,8 @@ customizations should be done in another modue.
 import logging
 import re
 import MySQLdb
-import exceptions
+
+from bibliom import exceptions
 
 # Above this number of table rows, will log progress when syncing to db.
 INFO_THRESHOLD = 10000
@@ -60,7 +61,7 @@ class DBManager:
                 logging.getLogger(__name__).exception("Failed to connect to database.")
                 #Unknown database
                 if e.args[0] == 1049:
-                    raise exceptions.UnknownDatabaseError("Database %s not found", self.name)
+                    raise exceptions.UnknownDatabaseError("Database %s not found" % self.name)
                 else:
                     raise
             else:
@@ -152,7 +153,7 @@ class DBManager:
                 value_list.append(where_value)
 
         return (where, value_list)
-    
+
     @staticmethod
     def _query_params(param_dictionary):
         """
@@ -245,7 +246,7 @@ class DBManager:
                 "Error attempting to create new database with name %s", name)
             temp_db.close()
             raise
-        
+
         try:
             query = "USE %s" % name
             cursor.execute(query)
@@ -263,7 +264,7 @@ class DBManager:
             raise exceptions.FailedDatabaseCreationError("Failed to create database tables.")
 
         temp_db.close()
-        self.name = name          
+        self.name = name
         self._connect()
 
     def reset_database(self, sql_source_file=None):
@@ -275,7 +276,7 @@ class DBManager:
         try:
             cursor.execute(query)
         except MySQLdb.Error:
-            logging.getLogger(__name__).exception("Error dropping database %s" % self.name)
+            logging.getLogger(__name__).exception("Error dropping database %s", self.name)
             raise
         self.create_database(self.name, sql_source_file)
 
@@ -453,7 +454,7 @@ class DBManager:
             rows_dict[key_str] = result
         return rows_dict
 
-    def insert_row(self, table_name, row_dict, duplicates=None):
+    def insert_row(self, table_name, row_dict):
         """
         Inserts a row into table.
 
@@ -472,7 +473,7 @@ class DBManager:
         try:
             cursor = self.db.cursor()
             cursor.execute(query, params['value_list'])
-            self.db.commit()   
+            self.db.commit()
         except MySQLdb.Error as e:
             self.db.rollback()
             if e.args[0] == 1062: #Duplicate entry
@@ -636,8 +637,8 @@ class DBTable:
     def __init__(self, manager, table_name):
         if table_name in manager.existing_table_object_keys():
             raise exceptions.BiblioException(
-                'Attempted to create a DBTable object, but one '
-              + ' already exists for this table and manager.')
+                'Attempted to create a DBTable object, but one ' +
+                ' already exists for this table and manager.')
         self.manager = manager
         self.table_name = table_name
         self.manager.dbtables[table_name] = self
@@ -783,7 +784,7 @@ class DBTable:
             elif duplicates == self.Duplicates.MERGE:
                 for key, value in row_dict.items():
                     if not value:
-                        del(row_dict[key])
+                        del row_dict[key]
                 if self.update_row(old_entity.row_key, row_dict):
                     self.row_status[old_entity.row_key] = DBTable.RowStatus.SYNCED
                 return old_entity.row_key
@@ -960,7 +961,7 @@ class DBEntity:
             self.db_table.get_row_by_key(row_key)
         else:
             self.row_key = self.db_table.create_new_row(fields_dict)
-        
+
         if self.row_key not in db_table.entites.keys():
             db_table.entites[row_key] = self
 
@@ -998,7 +999,7 @@ class DBEntity:
         """
         entity_list = cls.fetch_entities(db_table, where_dict)
         return entity_list[0]
-    
+
     @property
     def fields_dict(self):
         """
@@ -1017,7 +1018,7 @@ class DBEntity:
         Sets the value of a field.
         """
         self.db_table.set_field(self.row_key, field_name, field_value)
-    
+
     def save_to_db(self, duplicates=None):
         """
         Inserts entity into db and updates row_key.

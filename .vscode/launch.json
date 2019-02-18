@@ -18,7 +18,7 @@
             "program": "${file}",
             "console": "integratedTerminal",
             "args": [
-                "/Users/mikethicke/GitHub/bibliometrics-database/test_data/webofscience/",
+                "/Users/mikethicke/GitHub/bibliom/test_data/webofscience/",
                 "-d=a_new_database",
                 "-c",
                 "-r"

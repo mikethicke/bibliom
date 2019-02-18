@@ -4,6 +4,7 @@ The parsers in this module don't interact with the database or publication
 objects directly.
 """
 
+import logging
 from abc import ABC, abstractmethod
 import os
 import re
@@ -74,7 +75,7 @@ class Parser(ABC):
             if parser_class.is_parsable_file(file_path):
                 return parser_class
         return False
-    
+
     @staticmethod
     def get_parser_for_directory(directory_path):
         """
@@ -91,7 +92,6 @@ class Parser(ABC):
                     return parser_class
         return False
 
-
     @classmethod
     def is_parsable(cls, content):
         """
@@ -100,11 +100,8 @@ class Parser(ABC):
         test_parser = cls()
         try:
             test_parser.parse_content_item(content)
-            if test_parser.parsed_list:
-                return True
-            else:
-                return False
-        except:
+            return bool(test_parser.parsed_list)
+        except: # Any exception should just cause this function to return false.
             return False
 
     @classmethod
@@ -112,6 +109,8 @@ class Parser(ABC):
         """
         Returns true if file is parsable by this class, false otherwise.
         """
+        # By default this isn't implemented, but descendents aren't *required* to
+        # implement it, so just return False by default.
         return False
 
     @staticmethod
@@ -316,8 +315,8 @@ class WOKParser(Parser):
             try:
                 self.parsed_dict[record_dict[self.id_field]] = record_dict
             except KeyError:
-                print("WOKParser|parse_content_item: Field "
-                      + "%s not found in parsed record" % self.id_field)
+                logging.getLogger(__name__).exception(
+                    "Field %s not found in parsed record", self.id_field)
                 raise
         else:
             self.parsed_list.append(record_dict)
@@ -338,8 +337,10 @@ class WOKParser(Parser):
 
     def parse_file(self, file_path):
         if not self.is_parsable_file(file_path):
-            #Should probably throw an exception instead?
-            return False
+            raise ValueError(
+                'File %s is not parsable by %s' %
+                file_path,
+                type(self).__name__)
         with open(file_path, 'rb') as f:
             file_data = f.read()
             if self.encoding is None:

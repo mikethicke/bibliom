@@ -64,7 +64,7 @@ class Paper(DBEntity):
         citing_papers = [Paper.fetch_entity(self.db_table, {'idpaper':c.source_id})
                          for c in citations]
         return citing_papers
-    
+
     def cite(self, target):
         """
         Create a citation from self to target paper.
@@ -185,9 +185,7 @@ def unit_test():
     """
     Unit tests for publication_objects module.
     """
-    from dbmanager import DBManager
-    import pprint
-    pp = pprint.PrettyPrinter(indent=4)
+    from bibliom.dbmanager import DBManager
 
     database_name = "test_db"
     database_user = "test_user"
