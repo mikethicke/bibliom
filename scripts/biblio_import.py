@@ -191,7 +191,7 @@ def main():
             stream=sys.stdout,
             format="%(asctime)s - %(message)s",
             datefmt="%H:%M:%S",
-            level=level
+            level=levelq
         )
 
     if options['clear']:
