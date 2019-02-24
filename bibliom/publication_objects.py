@@ -3,7 +3,7 @@ This module implements publication objects for a bibliometric database.
 """
 import re
 
-from dbmanager import DBEntity
+from bibliom.dbmanager import DBEntity
 
 class Paper(DBEntity):
     """

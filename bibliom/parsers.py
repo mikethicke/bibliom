@@ -139,7 +139,10 @@ class Parser(ABC):
         """
         for file_path in file_paths:
             if os.path.isfile(file_path):
-                self.parse_file(file_path)
+                try:
+                    self.parse_file(file_path)
+                except ValueError:
+                    pass
 
     def parse_directory(self, directory_path):
         """
@@ -329,7 +332,10 @@ class WOKParser(Parser):
             file_data = f.read()
             if encoding is None:
                 encoding = detect_encoding(file_data)
-            file_text = file_data.decode(encoding)
+            try:
+                file_text = file_data.decode(encoding)
+            except UnicodeDecodeError:
+                return False
             for header in cls._valid_headers:
                 if file_text.startswith(header):
                     return True
@@ -338,7 +344,7 @@ class WOKParser(Parser):
     def parse_file(self, file_path):
         if not self.is_parsable_file(file_path):
             raise ValueError(
-                'File %s is not parsable by %s' %
+                'File %s is not parsable by %s',
                 file_path,
                 type(self).__name__)
         with open(file_path, 'rb') as f:

@@ -5,6 +5,8 @@ customizations should be done in another modue.
 """
 import logging
 import re
+import os
+
 import MySQLdb
 
 from bibliom import exceptions
@@ -108,9 +110,9 @@ class DBManager:
             if where:
                 where = where + conj
             if where_value == 'NULL':
-                where += "%s IS NULL" % where_key
+                where += "`%s` IS NULL" % where_key
             elif where_value == 'NOT NULL':
-                where += "%s IS NOT NULL" % where_key
+                where += "`%s` IS NOT NULL" % where_key
             elif isinstance(where_value, list) and where_value:
                 if (isinstance(where_value[0], str)
                         and where_value[0].startswith('%')):
@@ -125,7 +127,7 @@ class DBManager:
                         value_list.append(li)
                     where += ")"
                 else:
-                    where += "%s IN (" % where_key
+                    where += "`%s` IN (" % where_key
                     in_clause = ""
                     for li in where_value:
                         if in_clause:
@@ -134,7 +136,7 @@ class DBManager:
                         value_list.append(li)
                     where += in_clause + ")"
             elif str(where_value).startswith('%'):
-                where += where_key + " LIKE %s"
+                where += "`" + where_key + "` LIKE %s"
                 value_list.append(where_value)
             elif (str(where_value).startswith('>')
                   or str(where_value).startswith('<')
@@ -143,13 +145,13 @@ class DBManager:
                   or str(where_value).startswith('!=')):
                 m = re.match(r'(.*) (.*)', where_value)
                 if m is not None:
-                    where += "{key} {operator} '{value}'".format(
+                    where += "`{key}` {operator} '{value}'".format(
                         key=where_key,
                         operator=m.group(1),
                         value=MySQLdb.escape_string(str(m.group(2))).decode('UTF-8')
                     )
             else:
-                where += where_key + "=%s"
+                where += "`" + where_key + "`=%s"
                 value_list.append(where_value)
 
         return (where, value_list)
@@ -171,7 +173,9 @@ class DBManager:
                             'update_str': "key = %s"s for each key in update query,
                             'where_or_clause': string for where clause connected by "OR"s
         """
-        if param_dictionary and isinstance(param_dictionary, dict):
+        if param_dictionary:
+            if not isinstance(param_dictionary, dict):
+                raise TypeError('Needs to be called with a dictionary of db fields and values.')
             key_str = ""
             value_list = []
             value_alias = ""
@@ -183,10 +187,10 @@ class DBManager:
                         key_str += ", "
                         update_str += ", "
                         where_or_clause += "OR "
-                    key_str += str(key)
+                    key_str += "`" + str(key) + "`"
                     value_list.append(value)
-                    update_str += str(key) + "=%s"
-                    where_or_clause += str(key) + "=%s "
+                    update_str += "`" + str(key) + "`=%s"
+                    where_or_clause += "`" + str(key) + "`=%s "
             for i in range(0, len(value_list)):
                 value_alias += "%s"
                 if i < len(value_list) - 1:
@@ -205,15 +209,18 @@ class DBManager:
         if name is None:
             name = self.name
         if name is None:
-            raise AttributeError("Create database requires database name.")
+            raise ValueError("Create database requires database name.")
 
         logging.getLogger(__name__).debug("Connecting to database %s", name)
 
         if self.user is None or self.password is None:
-            raise AttributeError("User and password must be set before creating database.")
+            raise ValueError("User and password must be set before creating database.")
 
         if sql_source_file is None:
-            sql_source_file = "create_db_tables.sql"
+            sql_source_file = os.path.join(
+                os.path.abspath(os.path.dirname(__file__)),
+                'config',
+                'create_db_tables.sql')
         try:
             with open(sql_source_file, 'r') as f:
                 sql_source = f.read()
@@ -267,18 +274,28 @@ class DBManager:
         self.name = name
         self._connect()
 
-    def reset_database(self, sql_source_file=None):
+    def drop_database(self):
         """
-        Drops database and re-creates.
+        Drops current database.
         """
+        if self.name is None:
+            return
         query = "DROP DATABASE %s" % self.name
         cursor = self.db.cursor()
         try:
             cursor.execute(query)
+            self._close()
         except MySQLdb.Error:
             logging.getLogger(__name__).exception("Error dropping database %s", self.name)
             raise
+
+    def reset_database(self, sql_source_file=None):
+        """
+        Drops database and re-creates.
+        """
+        self.drop_database()
         self.create_database(self.name, sql_source_file)
+        self.dbtables = {}
 
     def list_tables(self):
         """
@@ -381,7 +398,7 @@ class DBManager:
         """
         Returns list of existing DBTable objects associated with self.
         """
-        return self.dbtables.keys()
+        return list(self.dbtables.keys())
 
     def get_table_object(self, table_name):
         """
@@ -417,7 +434,7 @@ class DBManager:
         except MySQLdb.Error as e:
             logging.getLogger(__name__).exception(
                 "Failed to fetch row. Query: %s Error: %s", query, e)
-            return []
+            raise
         result = cursor.fetchone()
         return result
 
@@ -468,8 +485,6 @@ class DBManager:
         params = DBManager._query_params(row_dict)
         query = ("INSERT INTO %s (%s) VALUES (%s)"
                  % (table_name, params['key_str'], params['value_alias']))
-        logging.getLogger(__name__).debug(
-            "Inserting row into database. Query: %s", query)
         try:
             cursor = self.db.cursor()
             cursor.execute(query, params['value_list'])
@@ -498,23 +513,47 @@ class DBManager:
                 List of row dicts. Each dict must have the same set of
                 column:value pairs.
 
-        Returns: True if successful, False otherwise. Note: does not return
-                 primary keys of inserted rows, so there is no way to directly
-                 track the inserted rows. They must be retrieved in a seperate
-                 query.
+        Returns: row_dict_list updated with auto incremented primary keys if available
         """
+        if (not isinstance(row_dict_list, list) or
+                not isinstance(row_dict_list[0], dict)):
+            raise TypeError("row_dict_list must be list of dicts of column:value pairs.")
+        # Get auto increment primary key if one exists
+        table_dict = self.table_structure(table_name)
+        auto_increment = None
+        for key, field in table_dict.items():
+            if field['key'] == 'PRI' and field['extra'] == 'auto_increment':
+                query = ("SELECT AUTO_INCREMENT " +
+                         "FROM information_schema.tables " +
+                         "WHERE table_name = '%s' " % table_name +
+                         "AND table_schema = DATABASE();")
+                cursor = self.db.cursor()
+                cursor.execute(query)
+                result = cursor.fetchone()
+                if result:
+                    auto_increment = int(result[0])
+                pri_key_field = key
+                break
+
+        if auto_increment is not None:
+            for row_dict in row_dict_list:
+                if row_dict.get(pri_key_field) is not None:
+                    continue
+                row_dict[pri_key_field] = auto_increment
+                auto_increment += 1
+
         try:
             params = DBManager._query_params(row_dict_list[0])
-        except (IndexError, KeyError):
-            logging.getLogger(__name__).exception(
-                "row_dict_list must be list of dicts of column:value pairs.")
-            raise AttributeError("row_dict_list must be list of dicts of column:value pairs.")
+        except (IndexError, KeyError, TypeError):
+            raise TypeError("row_dict_list must be list of dicts of column:value pairs.")
+
         query = ("INSERT INTO %s (%s) VALUES (%s)"
                  % (table_name, params['key_str'], params['value_alias']))
         logging.getLogger(__name__).debug(
             "Inserting %d rows into table %s. Query: %s",
             len(row_dict_list), table_name, query)
-        rows_lists = [rd.values() for rd in row_dict_list]
+        rows_lists = [list(rd.values()) for rd in row_dict_list]
+        rows_lists = [[item for item in row if item] for row in rows_lists]
         try:
             cursor = self.db.cursor()
             cursor.executemany(query, rows_lists)
@@ -523,8 +562,8 @@ class DBManager:
             logging.getLogger(__name__).exception(
                 "Failed to insert rows. Query: %s Error: %s", query, str(e))
             self.db.rollback()
-            return False
-        return True
+            raise
+        return row_dict_list
 
     def update_rows(self, table_name, row_dict, where_dict):
         """
@@ -534,6 +573,9 @@ class DBManager:
             table_name (str): Name of the table to update.
             row_dict (dict): Column:value pairs to update
             where_dict (dict): Column:value pairs for where clause.
+
+        Returns:
+            True if at least one row is updated, False otherwise.
         """
         params = DBManager._query_params(row_dict)
         (where_clause, where_values) = DBManager._build_where(where_dict)
@@ -541,37 +583,23 @@ class DBManager:
                  (table_name,
                   params['update_str'],
                   where_clause))
-        logging.getLogger(__name__).debug(
-            "Updating rows in database. Query: %s", query)
         try:
             cursor = self.db.cursor()
             cursor.execute(query, params['value_list'] + where_values)
             self.db.commit()
-            return True
+            return cursor.rowcount > 0
         except MySQLdb.Error as e:
             logging.getLogger(__name__).exception(
                 "Failed to update row. Query: %s Error %s", query, str(e))
             self.db.rollback()
-            return False
-
-    def update_row(self, table_name, key, row_dict):
-        """
-        Update row with primary key key_dict according to row_dict.
-
-        Args:
-            table_name (str): Name of table to update.
-            key (str, int or dict): Primary key or key dict of row to update.
-            row_dict: Dict of column:value pairs to update row with.
-
-        Returns:
-            True if successful, False otherwise.
-        """
-        key_dict = DBTable.key_to_dict(key)
-        return self.update_rows(table_name, row_dict, key_dict)
+            raise
 
     def delete_rows(self, table_name, where_dict, or_clause=False):
         """
         Deletes rows from table_name matching where_dict.
+
+        Returns:
+            True if at least one row affected. False otherwise.
         """
         (where_clause, value_list) = DBManager._build_where(where_dict, or_clause)
         query = "DELETE FROM %s WHERE %s" % (table_name, where_clause)
@@ -581,26 +609,12 @@ class DBManager:
             cursor = self.db.cursor()
             cursor.execute(query, value_list)
             self.db.commit()
-            return True
+            return cursor.rowcount > 0
         except MySQLdb.Error as e:
             logging.getLogger(__name__).exception(
                 "Failed to delete rows from database. Query: %s Error: %s", query, str(e))
             self.db.rollback()
             return False
-
-    def delete_row(self, table_name, key):
-        """
-        Delete row from table_name with key matching key.
-
-        Args:
-            table_name (str): Name of the table to delete from.
-            key (str, int or dict): Primary key or key dict of row to delete.
-        """
-        key_dict = DBTable.key_to_dict(key)
-        if list(key_dict.keys()) == self.primary_key_list(table_name):
-            return self.delete_rows(table_name, key_dict)
-        raise AttributeError("DBManager.delete_row must be called with primary" +
-                             " key of row to be deleted")
 
     def import_dict(self, db_dict):
         """
@@ -610,20 +624,21 @@ class DBManager:
             db_dict (dict([dict])): Outer dict is indexed by table name and
                                     inner dict is indexed by column name.
         """
-        for table_name, table_dict in db_dict:
-            self.dbtables[table_name].add_rows(table_dict)
+        for table_name, table_list in db_dict.items():
+            self.insert_many_rows(table_name, table_list)
 
     def clear_table(self, table_name):
         """
         Delete all rows from table_name.
         """
-        self.delete_rows(table_name, "1")
+        self.delete_rows(table_name, where_dict=None)
 
     def sync_to_db(self):
         """
         Sync all tables to database.
         """
         logging.getLogger(__name__).debug("Syncing all tables to database.")
+        self.get_table_objects()
         for table in self.dbtables.values():
             table.sync_to_db()
 
@@ -658,6 +673,8 @@ class DBTable:
         """
         Generates a key string from a dict of column:value.
         """
+        if not isinstance(key_dict, dict):
+            raise TypeError('key_dict must be a dict of column:value.')
         key_str = DBTable.KEY_STR_DELIMITER.join(key_dict.keys())
         key_str += (DBTable.KEY_STR_DELIMITER
                     + DBTable.KEY_STR_DELIMITER.join(
@@ -669,13 +686,20 @@ class DBTable:
         """
         Generates a dictionary of column:value from key.
         """
-        if isinstance(key, dict):
-            return key
+        if not isinstance(key, str):
+            raise TypeError('key must be a codeded string.')
         key_list = str(key).split(DBTable.KEY_STR_DELIMITER)
         key_length = len(key_list) // 2
         dict_keys = key_list[:key_length]
         dict_values = key_list[key_length:]
-        key_dict = {dict_keys[i]:dict_values[i] for i in range(0, key_length)}
+        if not key_length or len(dict_keys) != len(dict_values):
+            raise ValueError("key %s improperly formatted" % key)
+        key_dict = {}
+        for i in range(0, key_length):
+            try:
+                key_dict[dict_keys[i]] = int(dict_values[i])
+            except ValueError:
+                key_dict[dict_keys[i]] = dict_values[i]
         return key_dict
 
     def table_structure(self):
@@ -765,7 +789,7 @@ class DBTable:
         if duplicate_entry:
             duplicate_key = None
             for key, value in row_dict.items():
-                if value == duplicate_value:
+                if str(value) == duplicate_value:
                     duplicate_key = key
                     break
             if duplicate_key:
@@ -787,6 +811,8 @@ class DBTable:
                         del row_dict[key]
                 if self.update_row(old_entity.row_key, row_dict):
                     self.row_status[old_entity.row_key] = DBTable.RowStatus.SYNCED
+                    for key, value in row_dict.items():
+                        self.rows[old_entity.row_key][key] = value
                 return old_entity.row_key
             else:
                 raise AttributeError("Parameter 'duplicates' has unknown value.")
@@ -805,7 +831,9 @@ class DBTable:
             else:
                 raise exceptions.BiblioException(
                     'Primary key is neither AUTO INCRIMENT nor subset of row_dict.')
-            self.rows[new_row_key] = row_dict
+            self.rows[new_row_key] = {}
+            for field_key in self.fields:
+                self.rows[new_row_key][field_key] = row_dict.get(field_key)
             self.row_status[new_row_key] = DBTable.RowStatus.SYNCED
             return new_row_key
 
@@ -814,17 +842,24 @@ class DBTable:
         Inserts all new rows into database and then deletes them.
 
         This should be used to insert many new rows when sync_to_db would be
-        inefficient. The rows are then deleted from self.rows because the
-        primary keys for the new rows will not be known. If a DBEntity
-        references a deleted row, it will raise an exception.
+        inefficient.
         """
         new_keys = [key for key, value in self.row_status.items()
                     if value == self.RowStatus.NEW]
         new_rows = [row for key, row in self.rows.items() if key in new_keys]
-        if self.manager.insert_many_rows(self.table_name, new_rows):
+        updated_rows = self.manager.insert_many_rows(self.table_name, new_rows)
+        if updated_rows:
             for key in new_keys:
                 del self.row_status[key]
                 del self.rows[key]
+            pkl = self.manager.primary_key_list(self.table_name)
+            for row in updated_rows:
+                key_dict = {}
+                for key in pkl:
+                    key_dict[key] = row[key]
+                key_str = self.dict_to_key(key_dict)
+                self.rows[key_str] = row
+                self.row_status[key_str] = self.RowStatus.SYNCED
             return True
         return False
 
@@ -839,7 +874,10 @@ class DBTable:
         Returns:
             True if successful, False otherwise.
         """
-        return self.manager.update_row(self.table_name, row_key, row_dict)
+        return self.manager.update_rows(
+            self.table_name,
+            row_dict,
+            DBTable.key_to_dict(row_key))
 
     def delete_row(self, row_key):
         """
@@ -849,28 +887,36 @@ class DBTable:
             table_name (str): Name of the table to delete from.
             key (str, int or dict): Primary key or key dict of row to delete.
         """
-        return self.manager.delete_row(self.table_name, row_key)
+        del self.rows[row_key]
+        return self.manager.delete_rows(
+            self.table_name,
+            DBTable.key_to_dict(row_key))
 
-    def delete_rows(self, where_dict, or_clause=False):
+    def delete_rows(self, row_keys):
         """
         Deletes rows from table_name matching where_dict.
         """
-        return self.manager.delete_rows(self.table_name, where_dict, or_clause)
+        if ((not isinstance(row_keys, list)) or
+                row_keys and not isinstance(row_keys[0], str)):
+            raise TypeError("row_keys must be list of row keys to delete")
+        for row_key in row_keys:
+            self.delete_row(row_key)
 
     def entity_from_row(self, row_key):
         """
         Create a new entity associated with row_key.
         """
-        if row_key in self.rows.keys():
+        row = self.get_row_by_key(row_key)
+        if row:
             return DBEntity(self, row_key)
-        return DBEntity(self)
+        raise ValueError("row_key %s not in table %s" % (row_key, self.table_name))
 
     def generate_entities(self):
         """
         Returns a dictionary of DBEntities corresponding to self.rows
         """
         entity_dict = {row_key:self.entity_from_row(row_key)
-                       for row_key, row_data in self.rows}
+                       for row_key in self.rows.keys()}
         return entity_dict
 
     class RowStatus:
@@ -891,7 +937,13 @@ class DBTable:
         if fields_dict is None:
             self.rows[row_key] = {field:None for field in self.fields}
         else:
-            self.rows[row_key] = {field:fields_dict[field]
+            if not isinstance(fields_dict, dict):
+                raise TypeError("fields_dict must by dict of column:value pairs")
+            for key in fields_dict.keys():
+                if key not in self.fields:
+                    raise ValueError("fields_dict contains fields not in %s table" %
+                                     self.table_name)
+            self.rows[row_key] = {field:fields_dict.get(field)
                                   for field in self.fields}
         self.row_status[row_key] = DBTable.RowStatus.NEW
         return row_key
@@ -900,6 +952,8 @@ class DBTable:
         """
         Adds new rows from list of fields dicts or dict of fields dicts.
         """
+        if not isinstance(rows, dict) and not isinstance(rows, list):
+            raise TypeError("rows must be list of fields dicts or dict of fields dicts")
         if isinstance(rows, dict):
             rows = rows.values()
         for row in rows:
@@ -910,6 +964,9 @@ class DBTable:
         Sets the value of a field in a row. If row's status is SYNCED, set
         status to UNSYNCED.
         """
+        row = self.rows.get(row_key)
+        if row is None:
+            raise ValueError("row_key %s not found in table %s" %(row_key, self.table_name))
         self.rows[row_key][field_name] = field_value
         if self.row_status[row_key] == DBTable.RowStatus.SYNCED:
             self.row_status[row_key] = DBTable.RowStatus.UNSYNCED
@@ -930,9 +987,9 @@ class DBTable:
                 self.row_status[new_row_key] = DBTable.RowStatus.SYNCED
                 del self.rows[row_key]
             elif self.row_status[row_key] == DBTable.RowStatus.UNSYNCED:
-                if (self.manager.update_row(self.table_name,
-                                            DBTable.key_to_dict(row_key),
-                                            row_dict)):
+                if (self.manager.update_rows(self.table_name,
+                                             row_dict,
+                                             DBTable.key_to_dict(row_key))):
                     self.row_status[row_key] = DBTable.RowStatus.SYNCED
                 else:
                     raise exceptions.BiblioException('In DBTable.sync_to_db: Row failed to update.')
@@ -998,7 +1055,9 @@ class DBEntity:
         Returns a single entity from db_table matching where_dict.
         """
         entity_list = cls.fetch_entities(db_table, where_dict)
-        return entity_list[0]
+        if entity_list:
+            return entity_list[0]
+        return None
 
     @property
     def fields_dict(self):
@@ -1025,94 +1084,3 @@ class DBEntity:
         """
         new_row_key = self.db_table.insert_row(self.fields_dict, duplicates)
         self.row_key = new_row_key
-
-def unit_test():
-    """
-    Runs unit test for module.
-    """
-    import pprint
-    pp = pprint.PrettyPrinter(indent=4)
-    print("\n***Testing DBManager***\n")
-
-    database_name = "test_db"
-    database_user = "test_user"
-    database_password = "jfYf2NoJr4DMHrF,3b"
-    print(">>> db = DBManager('%s', '%s', '%s')"
-          % (database_name, database_user, database_password))
-    db = DBManager(database_name, database_user, database_password)
-
-    print(">>> db_table_list = db.list_tables()")
-    db_table_list = db.list_tables()
-    print(db_table_list)
-
-    print(">>> a_table_structure = db.table_structure('%s')" % db_table_list[0])
-    a_table_structure = db.table_structure(db_table_list[0])
-    pp.pprint(a_table_structure)
-    print(">>> paper_foreign_keys = db.foreign_key_list('paper')")
-    paper_foreign_keys = db.foreign_key_list('paper')
-    pp.pprint(paper_foreign_keys)
-
-    print(">>> table_field_list = db.table_fields('%s')" % db_table_list[0])
-    table_field_list = db.table_fields(db_table_list[0])
-    pp.pprint(table_field_list)
-
-    print(">>> db.insert_row(%s, {'last_name': 'Thicke', 'given_names': 'Mike'})"
-          % db_table_list[0])
-    new_key = db.insert_row(db_table_list[0], {'last_name': 'Thicke', 'given_names': 'Mike'})
-    print(">>> db.update_row(%s, %s, %s)" %
-          (db_table_list[0], new_key, {'given_names': 'Michael Lowell Ellis'}))
-    db.update_row(db_table_list[0],
-                  new_key,
-                  {'given_names': 'Michael Lowell Ellis'})
-    print(">>> db.fetch_row(%s, {'last_name': 'Thicke'})" % db_table_list[0])
-    row = db.fetch_rows(db_table_list[0], {'last_name': 'Thicke'})
-    pp.pprint(row)
-    print(">>> rows = db.fetch_rows('%s', {'last_name': 'NOT NULL'}, 20)" % db_table_list[0])
-    rows = db.fetch_rows(db_table_list[0], {'last_name': 'NOT NULL'}, 20)
-    pp.pprint(rows)
-
-    print("\n***Testing DBTable***\n")
-
-    print(">>> a_db_table = DBTable(db, '%s')" % db_table_list[0])
-    a_db_table = DBTable(db, db_table_list[0])
-    print(a_db_table)
-    print(">>> a_db_table.insert_row({'last_name': 'Thicke', "
-          + "'given_names': 'Mira Ellis Hoffman'})")
-    mira_key = a_db_table.insert_row({'last_name': 'Thicke',
-                                      'given_names': 'Mira Ellis Hoffman'})
-    thicke_rows = a_db_table.fetch_rows({'last_name': 'Thicke'})
-    pp.pprint(thicke_rows)
-
-    print(">>> a_db_table.delete_row(%s)" % (new_key))
-    a_db_table.delete_row(new_key)
-    row = db.fetch_rows(db_table_list[0], {'last_name': 'Thicke'})
-    pp.pprint(row)
-    print("List of existing keys: %s" % db.existing_table_object_keys())
-    print(">>> all_table_objects = db.get_table_objects()")
-    all_table_objects = db.get_table_objects()
-    pp.pprint(db.existing_table_object_keys())
-    print(">>> duplicate_db_table = DBTable(db, '%s')" % db_table_list[0])
-    print("# This should generate an exception...")
-    try:
-        duplicate_db_table = DBTable(db, db_table_list[0])
-    except AssertionError as e:
-        print(e)
-
-    print("\n***Testing DBEntity***\n")
-    print(">>> mira_author = a_db_table.entity_from_row(%s)" % (mira_key,))
-    mira_author = a_db_table.entity_from_row(mira_key)
-    mira_author.orcid = "a1a1a1"
-    print("%s, %s: %s" % (mira_author.last_name, mira_author.given_names, mira_author.orcid))
-    print(">>> mira_author.given_names = 'Mira Ellis'")
-    mira_author.given_names = "Mira Ellis"
-    print(">>> mira_author.last_name = 'Hoffman Thicke'")
-    mira_author.last_name = "Hoffman Thicke"
-    print("%s, %s: %s" % (mira_author.last_name, mira_author.given_names, mira_author.orcid))
-    print(">>> a_db_table.delete_row(mira_author.row_key)")
-    a_db_table.delete_row(mira_author.row_key)
-
-    db.delete_rows(db_table_list[0], {'last_name':'Thicke'})
-
-
-if __name__ == "__main__":
-    unit_test()

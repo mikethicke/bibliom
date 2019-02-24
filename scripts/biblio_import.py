@@ -33,7 +33,6 @@ optional arguments:
                         Import records matching format (see below).
   -g CONFIG, --config CONFIG
                         Use configuration file.
-  -l [LOG], --log [LOG]
                         Log to file
 
 Available formats:
@@ -191,7 +190,7 @@ def main():
             stream=sys.stdout,
             format="%(asctime)s - %(message)s",
             datefmt="%H:%M:%S",
-            level=levelq
+            level=level
         )
 
     if options['clear']:

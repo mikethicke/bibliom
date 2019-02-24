@@ -8,9 +8,9 @@ produced by parsers into database table rows.
 import re
 import logging
 
-import parsers
-import dbmanager
-import publication_objects
+from bibliom import parsers
+from bibliom import dbmanager
+from bibliom import publication_objects
 
 REPORT_FREQUENCY = 500
 
