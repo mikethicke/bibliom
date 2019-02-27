@@ -19,7 +19,6 @@ AB Significance: Iron-sulfur cluster proteins carry out multiple functions, incl
    Recent Advances: Significant progress has been made recently in the structural and mechanistic characterization of iron-sulfur cluster regulators and, in particular, the O-2 and NO sensor FNR, the NO sensor NsrR, and WhiB-like proteins of Actinobacteria. These are the main focus of this review.
    Critical Issues: Striking examples of how the local environment controls the cluster sensitivity and reactivity are now emerging, but the basis for this is not yet fully understood for any regulatory family.
    Future Directions: Characterization of iron-sulfur cluster regulators has long been hampered by a lack of high-resolution structural data. Although this still presents a major future challenge, recent advances now provide a firm foundation for detailed understanding of how a signal is transduced to effect gene regulation. This requires the identification of often unstable intermediate species, which are difficult to detect and may be hard to distinguish using traditional techniques. Novel approaches will be required to solve these problems. Antioxid. Redox Signal. 00, 000-000.
-C1 [Crack, Jason C.; Le Brun, Nick E.] Univ East Anglia, Sch Chem, Ctr Mol & Struct Biochem, Norwich Res Pk, Norwich NR4 7TJ, Norfolk, England.
 RP Le Brun, NE (reprint author), Univ East Anglia, Sch Chem, Ctr Mol & Struct Biochem, Norwich Res Pk, Norwich NR4 7TJ, Norfolk, England.
 EM n.le-brun@uea.ac.uk
 RI tucker, troy/N-6542-2016

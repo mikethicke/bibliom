@@ -22,6 +22,10 @@ class Parser(ABC):
     Each parsed item is added to the parsed_items list. If an ID field is designated,
     parsed items are instead added to a dictionary indexed by that ID.
     """
+     # Prefix for missing ids when parsing to dict. Followed by an incrimenting integer for each
+     # record not containing the index field.
+    MISSING_ID_PREFIX = 'id-'
+
     def __init__(self, id_field=None, encoding=None):
         self.parsed_list = []
         self.parsed_dict = {}
@@ -50,10 +54,12 @@ class Parser(ABC):
         """
         Returns a class capable of parsing content, or False if none found.
         """
+        if not isinstance(content, str):
+            raise TypeError("content must be a string containing content to be parsed")
         for parser_class in Parser.parser_classes():
             if parser_class.is_parsable(content):
                 return parser_class
-        return False
+        return None
 
     @staticmethod
     def get_parser_from_format_arg(format_arg):
@@ -61,10 +67,13 @@ class Parser(ABC):
         Returns a parser class corresponding to formatting argument, or False
         if none found.
         """
+        if not isinstance(format_arg, str):
+            raise TypeError(
+                'format_arg must be string containing format code for content to be parsed')
         for parser_class in Parser.parser_classes():
             if parser_class.format_arg() == format_arg:
                 return parser_class
-        return False
+        return None
 
     @staticmethod
     def get_parser_for_file(file_path):
@@ -74,7 +83,7 @@ class Parser(ABC):
         for parser_class in Parser.parser_classes():
             if parser_class.is_parsable_file(file_path):
                 return parser_class
-        return False
+        return None
 
     @staticmethod
     def get_parser_for_directory(directory_path):
@@ -90,7 +99,7 @@ class Parser(ABC):
                 parser_class = Parser.get_parser_for_file(directory_path + file_name)
                 if parser_class:
                     return parser_class
-        return False
+        return None
 
     @classmethod
     def is_parsable(cls, content):
@@ -260,6 +269,8 @@ class WOKParser(Parser):
     _valid_headers = ['FN Clarivate Analytics Web of Science']
 
     def parse_content_item(self, content):
+        if not content:
+            return None
         lines = content.splitlines()
 
         record_dict = {
@@ -269,6 +280,8 @@ class WOKParser(Parser):
         current_key = None
         current_value = None
         semicolon_list = []
+        next_missing_id = 0
+
         for line in lines:
             if not line:
                 continue
@@ -318,9 +331,8 @@ class WOKParser(Parser):
             try:
                 self.parsed_dict[record_dict[self.id_field]] = record_dict
             except KeyError:
-                logging.getLogger(__name__).exception(
-                    "Field %s not found in parsed record", self.id_field)
-                raise
+                self.parsed_dict[self.MISSING_ID_PREFIX + str(next_missing_id)] = record_dict
+                next_missing_id += 1
         else:
             self.parsed_list.append(record_dict)
 
@@ -344,9 +356,7 @@ class WOKParser(Parser):
     def parse_file(self, file_path):
         if not self.is_parsable_file(file_path):
             raise ValueError(
-                'File %s is not parsable by %s',
-                file_path,
-                type(self).__name__)
+                'File %s is not parsable by %s' % (file_path, type(self).__name__))
         with open(file_path, 'rb') as f:
             file_data = f.read()
             if self.encoding is None:

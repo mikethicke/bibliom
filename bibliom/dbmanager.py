@@ -102,7 +102,7 @@ class DBManager:
             return ("1", [])
 
         if not isinstance(where_dict, dict):
-            raise AttributeError("where_dict must be dictionary")
+            raise TypeError("where_dict must be dictionary")
 
         where = ""
         conj = " OR " if or_clause else " AND "
@@ -293,7 +293,11 @@ class DBManager:
         """
         Drops database and re-creates.
         """
-        self.drop_database()
+        try:
+            self.drop_database()
+        except MySQLdb.OperationalError as e:
+            if e.args[0] != 1008: # Database doesn't exist
+                raise
         self.create_database(self.name, sql_source_file)
         self.dbtables = {}
 
@@ -1038,6 +1042,10 @@ class DBEntity:
         """
         Returns a list of entities from db_table corresponding to rows.
         """
+        if not isinstance(rows, dict):
+            raise TypeError('rows must be dictionary of table rows indexed by row_key')
+        if not isinstance(db_table, DBTable):
+            raise TypeError('db_table must be DBTable object')
         entities = [cls(db_table=db_table, row_key=key) for key in rows.keys()]
         return entities
 
@@ -1046,6 +1054,8 @@ class DBEntity:
         """
         Returns a list of entities from db_table matching where_dict.
         """
+        if not isinstance(db_table, DBTable):
+            raise TypeError("db_table must be DBTable object")
         rows = db_table.fetch_rows(where_dict)
         return cls.entities_from_table_rows(db_table, rows)
 
@@ -1076,6 +1086,8 @@ class DBEntity:
         """
         Sets the value of a field.
         """
+        if field_name not in self.db_table.fields:
+            raise ValueError("Field %s not in fields for %s table." % (field_name, self.db_table.table_name))
         self.db_table.set_field(self.row_key, field_name, field_value)
 
     def save_to_db(self, duplicates=None):
