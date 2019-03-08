@@ -3,7 +3,8 @@ Takes parsed record dicts and adds them to database tables.
 
 This module is an adapter between the parsers module and the dbmanager module,
 which are both designed to be general purpose. This module adapts the dicts
-produced by parsers into database table rows.
+produced by parsers into database table rows. Any parsing that is particular to
+this package take place here rather than in parsers.py.
 """
 import re
 import logging
@@ -66,10 +67,10 @@ def _wok_to_db(parser, manager, duplicates=None):
         # is recorded, set new_paper.retracted_year to that year. Add "retracted" to keywords.
         #
 
-        retracted_pattern = r'RETRACTED: (.*) \(Retracted article.*?(\d\d\d\d)?\)'
-        m = re.search(retracted_pattern, new_paper.title)
+        retracted_pattern = r'RETRACTED: (.*)\(Retracted article.*?(\d\d\d\d)?\)'
+        m = re.search(retracted_pattern, new_paper.title, flags=re.IGNORECASE)
         if m is not None:
-            new_paper.title = m.group(1)
+            new_paper.title = m.group(1).strip()
             if m.group(2) is not None:
                 new_paper.retracted_year = m.group(2)
             new_paper.was_retracted = True

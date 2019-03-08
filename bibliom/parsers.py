@@ -287,6 +287,8 @@ class WOKParser(Parser):
                 continue
             if re.match(r'^[A-Z,0-9][A-Z,0-9](?:\s.*$|$)', line):
                 if current_key is not None:
+                    if isinstance(current_value, str):
+                        current_value = current_value.strip()
                     if current_key in self._semicolon_list_tags:
                         current_value = current_value.split(';')
                         current_value = list(map(lambda x: x.strip(), current_value))

@@ -21,7 +21,10 @@ CREATE TABLE IF NOT EXISTS `journal` (
   `issn` VARCHAR(9) NULL DEFAULT NULL,
   `essn` VARCHAR(9) NULL DEFAULT NULL,
   `short_title` VARCHAR(1000) NULL DEFAULT NULL,
-  PRIMARY KEY (`idjournal`))
+  PRIMARY KEY (`idjournal`),
+  UNIQUE INDEX `issn_UNIQUE` (`issn` ASC),
+  UNIQUE INDEX `essn_UNIQUE` (`essn` ASC))
+ENGINE = InnoDB
 DEFAULT CHARACTER SET = utf8mb4;
 
 CREATE TABLE IF NOT EXISTS `paper` (

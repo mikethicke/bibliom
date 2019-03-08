@@ -17,6 +17,9 @@ INFO_THRESHOLD = 10000
 # Frequency to log progress when syncing to db.
 REPORT_FREQUENCY = 5000
 
+# Max retries on database queries
+MAX_DB_RETRIES = 5
+
 class DBManager:
     """
     Class for managing connection to MySQL database. All SQL should be
@@ -38,7 +41,7 @@ class DBManager:
         self.dbtables = {}
 
     def __del__(self):
-        self._close()
+        self.close()
 
     def __str__(self):
         return self.name
@@ -51,14 +54,15 @@ class DBManager:
                 and self.password is not None
                 and self.name is not None):
             logging.getLogger(__name__).debug(
-                "Connecting to database %s as %s", self.user, self.password)
+                "Connecting to database %s as %s", self.name, self.user)
             try:
                 self.db = MySQLdb.connect("localhost",
                                           self.user,
                                           self.password,
                                           self.name,
                                           charset=self.charset,
-                                          use_unicode=self.use_unicode)
+                                          use_unicode=self.use_unicode,
+                                          connect_timeout=5)
             except MySQLdb.Error as e:
                 logging.getLogger(__name__).exception("Failed to connect to database.")
                 #Unknown database
@@ -69,10 +73,11 @@ class DBManager:
             else:
                 logging.getLogger(__name__).debug("Successfully connected to database.")
 
-    def _close(self):
+    def close(self):
         """
         Close database connection.
         """
+        logging.getLogger(__name__).debug("Closing database connection to %s", self.name)
         if self.db is not None:
             try:
                 self.db.close()
@@ -82,6 +87,43 @@ class DBManager:
             else:
                 logging.getLogger(__name__).debug("Closed database connection.")
 
+    def _run_sql(self, sql_statements, ignore_exceptions=False):
+        """
+        Run a list of SQL statements.
+
+        Args:
+            sql_statements ([string]): List of SQL statements.
+
+        Returns:
+            True if all statements execute sucessfully.
+        """
+        if self.db is not None:
+            cursor = self.db.cursor()
+            for statement in sql_statements:
+                if statement:
+                    try:
+                        cursor.execute(statement)
+                    except MySQLdb.Error:
+                        if not ignore_exceptions:
+                            raise
+            return True
+        return False
+
+    def _run_sql_file(self, sql_source_file):
+        """
+        Run SQL statements contained in file.
+        """
+        logging.getLogger(__name__).debug("Running SQL file %s", sql_source_file)
+        try:
+            with open(sql_source_file, 'r') as f:
+                sql_source = f.read()
+            sql_statements = re.split(r';\s*$', sql_source, flags=re.MULTILINE)
+            sql_statements = [cmd.strip('\n') for cmd in sql_statements]
+        except IOError:
+            logging.getLogger(__name__).exception("Could not read file %s", sql_source_file)
+            raise
+
+        return self._run_sql(sql_statements)
 
     @staticmethod
     def _build_where(where_dict=None, or_clause=False):
@@ -211,7 +253,7 @@ class DBManager:
         if name is None:
             raise ValueError("Create database requires database name.")
 
-        logging.getLogger(__name__).debug("Connecting to database %s", name)
+        logging.getLogger(__name__).debug("Creating database %s", name)
 
         if self.user is None or self.password is None:
             raise ValueError("User and password must be set before creating database.")
@@ -231,7 +273,7 @@ class DBManager:
             raise
 
         if self.db is not None:
-            self._close()
+            self.close()
 
         query = "CREATE DATABASE %s" % name
 
@@ -273,26 +315,35 @@ class DBManager:
         temp_db.close()
         self.name = name
         self._connect()
+        logging.getLogger(__name__).debug("Successfully creatted database %s", name)
 
     def drop_database(self):
         """
         Drops current database.
         """
+        logging.getLogger(__name__).debug("Dropping database %s", self.name)
         if self.name is None:
             return
         query = "DROP DATABASE %s" % self.name
         cursor = self.db.cursor()
-        try:
-            cursor.execute(query)
-            self._close()
-        except MySQLdb.Error:
-            logging.getLogger(__name__).exception("Error dropping database %s", self.name)
-            raise
+        retries = 0
+        while True:
+            try:
+                cursor.execute(query)
+                self.close()
+                logging.getLogger(__name__).debug("Successfully dropped database.")
+                return
+            except MySQLdb.Error:
+                if retries < MAX_DB_RETRIES:
+                    continue
+                logging.getLogger(__name__).exception("Error dropping database %s", self.name)
+                raise
 
     def reset_database(self, sql_source_file=None):
         """
         Drops database and re-creates.
         """
+        logging.getLogger(__name__).debug("Resetting database.")
         try:
             self.drop_database()
         except MySQLdb.OperationalError as e:
@@ -300,6 +351,7 @@ class DBManager:
                 raise
         self.create_database(self.name, sql_source_file)
         self.dbtables = {}
+        logging.getLogger(__name__).debug("Successfully resetted database.")
 
     def list_tables(self):
         """
@@ -645,6 +697,7 @@ class DBManager:
         self.get_table_objects()
         for table in self.dbtables.values():
             table.sync_to_db()
+        logging.getLogger(__name__).debug("Successfully synced tables to database.")
 
 class DBTable:
     """
@@ -782,7 +835,7 @@ class DBTable:
             new_pri_key = self.manager.insert_row(self.table_name, row_dict)
             duplicate_entry = False
         except MySQLdb.IntegrityError as e:
-            if e.args[0] == 1062: #Duplicate entry
+            if e.args[0] == 1062: #Duplicate entr
                 m = re.match('Duplicate entry \'(.*)\' for key', e.args[1])
                 if m is not None:
                     duplicate_value = m.group(1)
@@ -1035,7 +1088,16 @@ class DBEntity:
         if attr_name in self.db_table.fields:
             self.set_field(attr_name, value)
         else:
-            self.__dict__[attr_name] = value
+            object.__setattr__(self, attr_name, value)
+
+    def __eq__(self, other):
+        try:
+            for field in self.fields_dict.keys():
+                if not self.get_field(field) == other.get_field(field):
+                    return False
+            return True
+        except AttributeError:
+            return False
 
     @classmethod
     def entities_from_table_rows(cls, db_table, rows):
@@ -1087,7 +1149,9 @@ class DBEntity:
         Sets the value of a field.
         """
         if field_name not in self.db_table.fields:
-            raise ValueError("Field %s not in fields for %s table." % (field_name, self.db_table.table_name))
+            raise ValueError(
+                "Field %s not in fields for %s table." % (field_name, self.db_table.table_name)
+            )
         self.db_table.set_field(self.row_key, field_name, field_value)
 
     def save_to_db(self, duplicates=None):

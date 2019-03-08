@@ -4,8 +4,10 @@ Unit tests for dbmanager.py
 
 # pylint: disable=unused-variable, missing-docstring, no-member, len-as-condition
 
-import pytest
+import logging
+
 import MySQLdb
+import pytest
 
 from bibliom import dbmanager
 from bibliom import exceptions
@@ -14,37 +16,13 @@ DB_NAME = 'test_db'
 DB_USER = 'test_user'
 DB_PASSWORD = 'jfYf2NoJr4DMHrF,3b'
 
-@pytest.fixture(scope="module")
-def connected_manager():
-    try:
-        manager = dbmanager.DBManager(
-            name=DB_NAME,
-            user=DB_USER,
-            password=DB_PASSWORD
-        )
-        manager.reset_database()
-    except exceptions.UnknownDatabaseError:
-        manager = dbmanager.DBManager(
-            name=None,
-            user=DB_USER,
-            password=DB_PASSWORD
-        )
-        manager.create_database(DB_NAME)
-    yield manager
-
-    del manager
-
-@pytest.fixture(scope="class")
-def class_manager(request, connected_manager):
-    request.cls.manager = connected_manager
-
-
 @pytest.mark.usefixtures('class_manager')
 class TestDBManager():
     """
     Tests for DBManager class.
     """
     def test_init(self):
+        logging.getLogger('bibliom.pytest').debug('-->TestDBManager.test_init')
         with pytest.raises(exceptions.UnknownDatabaseError):
             bad_manager = dbmanager.DBManager(
                 name='aaaaadfasfasdfdasfdsa',
@@ -72,10 +50,12 @@ class TestDBManager():
         assert isinstance(manager.db, MySQLdb.connections.Connection)
 
     def test_str(self):
+        logging.getLogger('bibliom.pytest').debug('-->TestDBManager.test_str')
         assert str(self.manager) == 'test_db'
 
     def test_build_where(self):
         # pylint: disable=protected-access
+        logging.getLogger('bibliom.pytest').debug('-->TestDBManager.test_build_where')
         manager = dbmanager.DBManager()
         assert manager._build_where() == ("1", [])
         assert(manager._build_where({
@@ -106,6 +86,7 @@ class TestDBManager():
 
     def test_query_params(self):
         # pylint: disable=protected-access
+        logging.getLogger('bibliom.pytest').debug('-->TestDBManager.test_get_query_params')
         manager = dbmanager.DBManager()
         assert manager._query_params({}) is None
         with pytest.raises(TypeError):
@@ -122,6 +103,7 @@ class TestDBManager():
         })
 
     def test_create_database(self):
+        logging.getLogger('bibliom.pytest').debug('-->TestDBManager.test_create_database')
         manager = dbmanager.DBManager()
         with pytest.raises(ValueError):
             manager.create_database()
@@ -134,6 +116,7 @@ class TestDBManager():
         assert isinstance(manager.db, MySQLdb.connections.Connection)
 
     def test_drop_database(self):
+        logging.getLogger('bibliom.pytest').debug('-->TestDBManager.test_drop_database')
         manager = dbmanager.DBManager(
             name='test_db_2',
             user=DB_USER,
@@ -143,20 +126,24 @@ class TestDBManager():
         assert manager.db is None
 
     def test_reset_database(self):
+        logging.getLogger('bibliom.pytest').debug('-->TestDBManager.test_reset_database')
         self.manager.reset_database()
         assert self.manager.name == 'test_db'
         assert isinstance(self.manager.db, MySQLdb.connections.Connection)
 
     def test_list_tables(self):
+        logging.getLogger('bibliom.pytest').debug('-->TestDBManager.test_list_tables')
         assert isinstance(self.manager.list_tables(), list)
 
     def test_table_structure(self):
+        logging.getLogger('bibliom.pytest').debug('-->TestDBManager.test_table_structure')
         table_name = self.manager.list_tables()[0]
         assert isinstance(
             self.manager.table_structure(table_name),
             dict)
 
     def test_primary_key_list(self):
+        logging.getLogger('bibliom.pytest').debug('-->TestDBManager.test_primary_key_list')
         table_name = self.manager.list_tables()[0]
         assert isinstance(
             self.manager.primary_key_list(table_name),
@@ -164,6 +151,7 @@ class TestDBManager():
         )
 
     def test_foreign_key_list(self):
+        logging.getLogger('bibliom.pytest').debug('-->TestDBManager.test_foreign_key_list')
         table_name = self.manager.list_tables()[0]
         assert isinstance(
             self.manager.foreign_key_list(table_name),
@@ -171,6 +159,7 @@ class TestDBManager():
         )
 
     def test_table_fields(self):
+        logging.getLogger('bibliom.pytest').debug('-->TestDBManager.test_table_fields')
         table_name = self.manager.list_tables()[0]
         assert isinstance(
             self.manager.table_fields(table_name),
@@ -179,6 +168,9 @@ class TestDBManager():
         assert len(self.manager.table_fields(table_name)) > 0
 
     def test_existing_table_object_keys(self):
+        logging.getLogger('bibliom.pytest').debug(
+            '-->TestDBManager.test_existing_table_object_keys'
+        )
         assert isinstance(
             self.manager.existing_table_object_keys(),
             list
@@ -186,17 +178,20 @@ class TestDBManager():
         assert len(self.manager.existing_table_object_keys()) == 0
 
     def test_get_table_object(self):
+        logging.getLogger('bibliom.pytest').debug('-->TestDBManager.test_get_table_object')
         table_name = self.manager.list_tables()[0]
         table_object = self.manager.get_table_object(table_name)
         assert isinstance(table_object, dbmanager.DBTable)
 
     def test_get_table_objects(self):
+        logging.getLogger('bibliom.pytest').debug('-->TestDBManager.test_get_table_objects')
         assert isinstance(self.manager.get_table_objects(), dict)
         assert(
             len(self.manager.list_tables()) ==
             len(self.manager.get_table_objects().items()))
 
     def test_insert_row(self):
+        logging.getLogger('bibliom.pytest').debug('-->TestDBManager.test_insert_row')
         table_name = 'author'
         good_row = {
             'last_name':    'Thicke',
@@ -251,6 +246,7 @@ class TestDBManager():
             row_id = self.manager.insert_row(table_name, duplicate_pkey_row)
 
     def test_fetch_row(self):
+        logging.getLogger('bibliom.pytest').debug('-->TestDBManager.test_fetch_row')
         table_name = 'author'
         row = self.manager.fetch_row(table_name, {'last_name': 'Thicke'})
         assert row['given_names'] == 'Michael Lowell Ellis'
@@ -265,6 +261,7 @@ class TestDBManager():
         assert len(row.items()) > 0
 
     def test_fetch_rows(self):
+        logging.getLogger('bibliom.pytest').debug('-->TestDBManager.test_fetch_rows')
         table_name = 'author'
         rows = self.manager.fetch_rows(table_name, {'given_names': '%Mich%'})
         assert isinstance(rows, dict)
@@ -275,6 +272,7 @@ class TestDBManager():
             rows = self.manager.fetch_rows(table_name, {'llast_name': 'Thicke'})
 
     def test_insert_many_rows(self):
+        logging.getLogger('bibliom.pytest').debug('-->TestDBManager.test_insert_many_rows')
         self.manager.reset_database()
         table_name = 'author'
         rows = []
@@ -292,6 +290,7 @@ class TestDBManager():
             self.manager.insert_many_rows(table_name, bad_row)
 
     def test_update_rows(self):
+        logging.getLogger('bibliom.pytest').debug('-->TestDBManager.test_update_rows')
         table_name = 'author'
         success = self.manager.update_rows(
             table_name=table_name,
@@ -309,6 +308,7 @@ class TestDBManager():
         assert list(fetched_rows.values())[0]['given_names'] == 'Mike'
 
     def test_delete_rows(self):
+        logging.getLogger('bibliom.pytest').debug('-->TestDBManager.test_delete_rows')
         table_name = 'author'
         success = self.manager.delete_rows(
             table_name=table_name,
@@ -322,6 +322,7 @@ class TestDBManager():
         assert not success
 
     def test_import_dict(self):
+        logging.getLogger('bibliom.pytest').debug('-->TestDBManager.test_import_dict')
         self.manager.reset_database()
         tables_dict = {
             'author': [
@@ -348,6 +349,7 @@ class TestDBManager():
         assert list(papers.values())[0]['title'] == 'Towards an analysis of unanalyzability'
 
     def test_clear_table(self):
+        logging.getLogger('bibliom.pytest').debug('-->TestDBManager.test_clear_table')
         self.manager.clear_table('author')
         authors = self.manager.fetch_rows('author')
         assert len(authors) == 0
@@ -359,6 +361,7 @@ class TestDBTable:
     """
 
     def test_init(self):
+        logging.getLogger('bibliom.pytest').debug('-->TestDBTable.test_init')
         self.manager.reset_database()
         table = dbmanager.DBTable(self.manager, 'paper')
         assert table.table_name == 'paper'
@@ -367,10 +370,12 @@ class TestDBTable:
             duplicate_table = dbmanager.DBTable(self.manager, 'paper')
 
     def test_str(self):
+        logging.getLogger('bibliom.pytest').debug('-->TestDBTable.test_str')
         table = self.manager.get_table_object('paper')
         assert str(table) == 'test_db|paper'
 
     def test_dict_to_key(self):
+        logging.getLogger('bibliom.pytest').debug('-->TestDBTable.test_dict_to_key')
         kd = dbmanager.DBTable.KEY_STR_DELIMITER
         key_dict = {
             'pkey1':    1
@@ -390,6 +395,7 @@ class TestDBTable:
             key = dbmanager.DBTable.dict_to_key(key_dict)
 
     def test_key_to_dict(self):
+        logging.getLogger('bibliom.pytest').debug('-->TestDBTable.test_key_to_dict')
         kd = dbmanager.DBTable.KEY_STR_DELIMITER
         key_str = 'pkey1' + kd + '1'
         key_dict = {
@@ -423,11 +429,13 @@ class TestDBTable:
             key_dict = dbmanager.DBTable.key_to_dict(key_str)
 
     def test_table_structure(self):
+        logging.getLogger('bibliom.pytest').debug('-->TestDBTable.test_table_structure')
         table = self.manager.get_table_object('paper')
         assert isinstance(table.table_structure(), dict)
         assert table.table_structure()
 
     def test_insert_row(self):
+        logging.getLogger('bibliom.pytest').debug('-->TestDBTable.test_insert_row')
         self.manager.reset_database()
         paper_table = self.manager.get_table_object('paper')
         citation_table = self.manager.get_table_object('citation')
@@ -516,6 +524,7 @@ class TestDBTable:
                                                         # no effect)
 
     def test_create_new_row(self):
+        logging.getLogger('bibliom.pytest').debug('-->TestDBTable.test_create_new_row')
         self.manager.reset_database()
         new_rows = [
             {
@@ -538,6 +547,7 @@ class TestDBTable:
             paper_table.create_new_row(new_rows[1])
 
     def test_insert_many_new_rows(self):
+        logging.getLogger('bibliom.pytest').debug('-->TestDBTable.test_insert_many_new_rows')
         self.manager.reset_database()
         author_table = self.manager.get_table_object('author')
         for i in range(0, 100):
@@ -562,6 +572,7 @@ class TestDBTable:
             author_table.insert_many_new_rows()
 
     def test_get_row_by_key(self):
+        logging.getLogger('bibliom.pytest').debug('-->TestDBTable.test_get_row_by_key')
         self.manager.reset_database()
         author_table = self.manager.get_table_object('author')
         author_table.insert_row({
@@ -594,6 +605,7 @@ class TestDBTable:
             row = author_table.get_row_by_key(row_key)
 
     def test_get_row_by_primary_key(self):
+        logging.getLogger('bibliom.pytest').debug('-->TestDBTable.test_get_row_by_primary_key')
         self.manager.reset_database()
         author_table = self.manager.get_table_object('author')
         author_table.insert_row({
@@ -607,6 +619,7 @@ class TestDBTable:
         assert row is None
 
     def test_delete_rows(self):
+        logging.getLogger('bibliom.pytest').debug('-->TestDBTable.test_delete_rows')
         self.manager.reset_database()
         author_table = self.manager.get_table_object('author')
         for i in range(0, 100):
@@ -629,6 +642,7 @@ class TestDBTable:
         assert len(rows) == 50
 
     def test_entity_from_row(self):
+        logging.getLogger('bibliom.pytest').debug('-->TestDBTable.test_entity_from_row')
         self.manager.reset_database()
         paper_dict = {
             'title':    'A Paper',
@@ -648,6 +662,7 @@ class TestDBTable:
             )
 
     def test_generate_entities(self):
+        logging.getLogger('bibliom.pytest').debug('-->TestDBTable.test_generate_entities')
         self.manager.reset_database()
         author_table = self.manager.get_table_object('author')
         for i in range(0, 100):
@@ -662,6 +677,7 @@ class TestDBTable:
             dbmanager.DBEntity)
 
     def test_add_rows(self):
+        logging.getLogger('bibliom.pytest').debug('-->TestDBTable.test_add_rows')
         self.manager.reset_database()
         author_table = self.manager.get_table_object('author')
         rows = [{'last_name':    'Numberer',
@@ -685,6 +701,7 @@ class TestDBTable:
             author_table.add_rows(bad_row)
 
     def test_set_field(self):
+        logging.getLogger('bibliom.pytest').debug('-->TestDBTable.test_add_field')
         self.manager.reset_database()
         paper_table = self.manager.get_table_object('paper')
         paper_dict = {
@@ -724,6 +741,7 @@ class TestDBTable:
             )
 
     def test_sync_to_db(self):
+        logging.getLogger('bibliom.pytest').debug('-->TestDBTable.test_sync_to_db')
         self.manager.reset_database()
         author_table = self.manager.get_table_object('author')
         for i in range(0, 100):
@@ -755,6 +773,7 @@ class TestDBEntity():
     Tests for DBEntity class.
     """
     def test_init(self):
+        logging.getLogger('bibliom.pytest').debug('-->TestDBEntity.test_init')
         self.manager.reset_database()
         paper_table = self.manager.get_table_object('paper')
         paper_dict = {
@@ -774,6 +793,7 @@ class TestDBEntity():
         assert entity4.title is None
 
     def test_getattr(self):
+        logging.getLogger('bibliom.pytest').debug('-->TestDBEntity.test_getattr')
         self.manager.reset_database()
         paper_table = self.manager.get_table_object('paper')
         paper_dict = {
@@ -788,6 +808,7 @@ class TestDBEntity():
             a = entity.tile # misspelling of field
 
     def test_setattr(self):
+        logging.getLogger('bibliom.pytest').debug('-->TestDBEntity.test_setattr')
         self.manager.reset_database()
         paper_table = self.manager.get_table_object('paper')
         paper_dict = {
@@ -802,6 +823,7 @@ class TestDBEntity():
         assert paper_table.rows[entity.row_key]['title'] == 'Another Title'
 
     def test_entities_from_table_rows(self):
+        logging.getLogger('bibliom.pytest').debug('-->TestDBEntity.test_entities_from_table_rows')
         self.manager.reset_database()
         author_table = self.manager.get_table_object('author')
         for i in range(0, 100):
@@ -827,6 +849,7 @@ class TestDBEntity():
         assert entities == []
 
     def test_fetch_entities(self):
+        logging.getLogger('bibliom.pytest').debug('-->TestDBEntity.test_fetch_entities')
         self.manager.reset_database()
         author_table = self.manager.get_table_object('author')
         for i in range(0, 100):
@@ -849,6 +872,7 @@ class TestDBEntity():
             entities = dbmanager.DBEntity.fetch_entities(author_table, [])
 
     def test_fetch_entity(self):
+        logging.getLogger('bibliom.pytest').debug('-->TestDBEntity.test_fetch_entity')
         self.manager.reset_database()
         author_table = self.manager.get_table_object('author')
         for i in range(0, 100):
@@ -862,6 +886,7 @@ class TestDBEntity():
         assert entity.last_name == 'Numberer'
 
     def test_fields_dict(self):
+        logging.getLogger('bibliom.pytest').debug('-->TestDBEntity.test_fields_dict')
         self.manager.reset_database()
         paper_table = self.manager.get_table_object('paper')
         paper_dict = {
@@ -875,6 +900,7 @@ class TestDBEntity():
         assert entity.fields_dict['content'] is None
 
     def test_get_field(self):
+        logging.getLogger('bibliom.pytest').debug('-->TestDBEntity.test_get_field')
         self.manager.reset_database()
         paper_table = self.manager.get_table_object('paper')
         paper_dict = {
@@ -886,6 +912,7 @@ class TestDBEntity():
         assert entity.get_field('title') == 'A Paper'
 
     def test_set_field(self):
+        logging.getLogger('bibliom.pytest').debug('-->TestDBEntity.test_set_field')
         self.manager.reset_database()
         paper_table = self.manager.get_table_object('paper')
         paper_dict = {
@@ -901,6 +928,7 @@ class TestDBEntity():
             entity.set_field('nofield', 'some value')
 
     def test_save_to_db(self):
+        logging.getLogger('bibliom.pytest').debug('-->TestDBEntity.test_save_to_db')
         self.manager.reset_database()
         paper_table = self.manager.get_table_object('paper')
         paper_dict = {
@@ -915,3 +943,23 @@ class TestDBEntity():
         new_entity = dbmanager.DBEntity.fetch_entity(paper_table, {'title': 'A Paper'})
         assert new_entity.url == "http://mikethicke.com"
         assert new_entity.row_key == 'idpaper' + dbmanager.DBTable.KEY_STR_DELIMITER + '1'
+
+    def test_eq(self):
+        logging.getLogger('bibliom.pytest').debug('-->TestDBEntity.test_eq')
+        self.manager.reset_database()
+        paper_table = self.manager.get_table_object('paper')
+        paper_dict = {
+            'title':    'A Paper',
+            'url':      "http://mikethicke.com",
+            'idpaper':  1
+        }
+        entity = dbmanager.DBEntity(paper_table, fields_dict=paper_dict)
+
+        entity_2 = dbmanager.DBEntity(paper_table)
+        assert entity != entity_2
+
+        entity_3 = dbmanager.DBEntity(paper_table, fields_dict=paper_dict)
+        assert entity == entity_3
+
+        assert entity is not None
+        assert entity != 'A Paper'

@@ -18,3 +18,10 @@ class FailedDatabaseCreationError(BiblioException):
     """
     Raised when attempt to create new database but failed.
     """
+
+class DBUnsyncedError(BiblioException):
+    """
+    Raised when operation requires first syncing to db, but no sync has been
+    done.
+    """
+

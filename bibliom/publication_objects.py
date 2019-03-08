@@ -4,6 +4,7 @@ This module implements publication objects for a bibliometric database.
 import re
 
 from bibliom.dbmanager import DBEntity
+from bibliom import exceptions
 
 class Paper(DBEntity):
     """
@@ -11,6 +12,10 @@ class Paper(DBEntity):
     """
     def __init__(self, db_table=None, db_manager=None, row_key=None, fields_dict=None):
         if db_table is None:
+            if db_manager is None:
+                raise ValueError(
+                    "When initializing, at least one of db_table and db_manager must not be None."
+                )
             db_table = db_manager.get_table_object('paper')
         super().__init__(db_table=db_table, row_key=row_key, fields_dict=fields_dict)
 
@@ -24,6 +29,8 @@ class Paper(DBEntity):
         """
         Get list of authors for a paper.
         """
+        if self.idpaper is None:
+            return []
         dbm = self.db_table.manager
         pa_table = dbm.get_table_object('paper_author')
         paper_authors = pa_table.fetch_rows({'idpaper':self.idpaper})
@@ -37,6 +44,8 @@ class Paper(DBEntity):
         """
         Get journal containing paper.
         """
+        if self.idjournal is None:
+            return None
         journal_table = self.db_table.manager.get_table_object('journal')
         journal = Journal.fetch_entity(journal_table, {'idjournal': self.idjournal})
         return journal
@@ -46,6 +55,8 @@ class Paper(DBEntity):
         """
         Returns list of papers cited by this paper.
         """
+        if self.idpaper is None:
+            return []
         dbm = self.db_table.manager
         citation_table = dbm.get_table_object('citation')
         citations = Citation.fetch_entities(citation_table, {'source_id':self.idpaper})
@@ -58,6 +69,8 @@ class Paper(DBEntity):
         """
         Returns list of papers citing this paper.
         """
+        if self.idpaper is None:
+            return []
         dbm = self.db_table.manager
         citation_table = dbm.get_table_object('citation')
         citations = Citation.fetch_entities(citation_table, {'target_id':self.idpaper})
@@ -67,10 +80,17 @@ class Paper(DBEntity):
 
     def cite(self, target):
         """
-        Create a citation from self to target paper.
+        Create a citation from self to target paper and return it.
         """
+        if not isinstance(target, DBEntity):
+            raise TypeError("Target of citation must be a DBEntity object")
+        if self.idpaper is None or target.idpaper is None:
+            raise exceptions.DBUnsyncedError(
+                "Source and target entities must be synced to DB before citation."
+            )
         new_citation = Citation(db_manager=self.db_table.manager)
         new_citation.cite(self, target)
+        return new_citation
 
 class Author(DBEntity):
     """
@@ -96,13 +116,16 @@ class Author(DBEntity):
             new_author.given_names = m.group(2)
         else:
             new_author.last_name = author_str
+            new_author.corporate = True
         return new_author
 
-
+    @property
     def papers(self):
         """
         Get list of papers written by author.
         """
+        if self.idauthor is None:
+            return []
         dbm = self.db_table.manager
         pa_table = dbm.get_table_object('paper_author')
         paper_authors = pa_table.fetch_rows({'idauthor':self.idauthor})
@@ -179,44 +202,3 @@ class Citation(DBEntity):
         Sets target_id to id of target Paper.
         """
         self.target_id = target.idpaper
-
-
-def unit_test():
-    """
-    Unit tests for publication_objects module.
-    """
-    from bibliom.dbmanager import DBManager
-
-    database_name = "test_db"
-    database_user = "test_user"
-    database_password = "jfYf2NoJr4DMHrF,3b"
-    db = DBManager(database_name, database_user, database_password)
-    paper_table = db.get_table_object('paper')
-    paper_rows = paper_table.fetch_rows(limit=10)
-    papers = Paper.entities_from_table_rows(paper_table, paper_rows)
-    for paper in papers:
-        print(paper)
-    test_paper = papers[0]
-    authors = test_paper.authors
-    for author in authors:
-        print(author)
-    authors[0].last_name += "~add~"
-    db.sync_to_db()
-    journal = test_paper.journal
-    print(journal)
-    jpapers = journal.papers
-    print(len(jpapers))
-    for p in jpapers[:10]:
-        print(p)
-    print("Cited papers: %s" % len(test_paper.cited_papers))
-    for cp in test_paper.cited_papers:
-        print(cp)
-    citing_papers = test_paper.citing_papers
-    print("Citing papers: %s" % len(citing_papers))
-    for ccp in citing_papers:
-        print(ccp)
-
-
-
-if __name__ == "__main__":
-    unit_test()
