@@ -19,9 +19,8 @@ class TestParserDBAdapter():
     """
     def test_wok_to_db(self):
         self.manager.reset_database()
-        parser_class = Parser.get_parser_for_file(self.file_paths['WOK']['file'])
-        parser = parser_class()
-        parser.parse_file(self.file_paths['WOK']['file'])
+        parser = Parser.get_parser_for_file(self.file_paths['WOK']['file'])
+        parser.parse_file()
         parser_db_adapter._wok_to_db(
             parser,
             self.manager,

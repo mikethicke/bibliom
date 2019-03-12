@@ -27,57 +27,53 @@ class TestParser():
 
     def test_get_parser_for_content(self):
         logging.getLogger('bibliom.pytest').debug('-->TestParser.test_get_parser_for_content')
-        parser_class = Parser.get_parser_for_content(self.test_data['WOK'])
-        parser = parser_class()
+        parser = Parser.get_parser_for_content(self.test_data['WOK'])
         assert isinstance(parser, WOKParser)
 
-        parser_class = Parser.get_parser_for_content(self.test_data['junk'])
-        assert parser_class is None
+        parser = Parser.get_parser_for_content(self.test_data['junk'])
+        assert parser is None
 
-        parser_class = Parser.get_parser_for_content('')
-        assert parser_class is None
+        parser = Parser.get_parser_for_content('')
+        assert parser is None
 
         with pytest.raises(TypeError):
-            parser_class = Parser.get_parser_for_content([])
+            parser = Parser.get_parser_for_content([])
 
     def test_get_parser_from_format_arg(self):
         logging.getLogger('bibliom.pytest').debug('-->TestParser.test_get_parser_from_format_arg')
-        parser_class = Parser.get_parser_from_format_arg('WOK')
-        parser = parser_class()
+        parser = Parser.get_parser_from_format_arg('WOK')
         assert isinstance(parser, WOKParser)
 
-        parser_class = Parser.get_parser_from_format_arg('asdfdsa')
-        assert parser_class is None
+        parser = Parser.get_parser_from_format_arg('asdfdsa')
+        assert parser is None
 
-        parser_class = Parser.get_parser_from_format_arg('')
-        assert parser_class is None
+        parser = Parser.get_parser_from_format_arg('')
+        assert parser is None
 
         with pytest.raises(TypeError):
-            parser_class = Parser.get_parser_from_format_arg([])
+            parser = Parser.get_parser_from_format_arg([])
 
     def test_get_parser_for_file(self):
         logging.getLogger('bibliom.pytest').debug('-->TestParser.test_get_parser_for_file')
-        parser_class = Parser.get_parser_for_file(self.file_paths['WOK']['file'])
-        parser = parser_class()
+        parser = Parser.get_parser_for_file(self.file_paths['WOK']['file'])
         assert isinstance(parser, WOKParser)
 
-        parser_class = Parser.get_parser_for_file(self.file_paths['junk']['file'])
-        assert parser_class is None
+        parser = Parser.get_parser_for_file(self.file_paths['junk']['file'])
+        assert parser is None
 
         with pytest.raises(FileNotFoundError):
-            parser_class = Parser.get_parser_for_file('not-a-file-path')
+            parser = Parser.get_parser_for_file('not-a-file-path')
 
     def test_get_parser_for_directory(self):
         logging.getLogger('bibliom.pytest').debug('-->TestParser.test_get_parser_for_directory')
-        parser_class = Parser.get_parser_for_directory(self.file_paths['WOK']['dir'])
-        parser = parser_class()
+        parser = Parser.get_parser_for_directory(self.file_paths['WOK']['dir'])
         assert isinstance(parser, WOKParser)
 
-        parser_class = Parser.get_parser_for_directory(self.file_paths['junk']['dir'])
-        assert parser_class is None
+        parser = Parser.get_parser_for_directory(self.file_paths['junk']['dir'])
+        assert parser is None
 
         with pytest.raises(FileNotFoundError):
-            parser_class = Parser.get_parser_for_directory('not-a-file-path')
+            parser = Parser.get_parser_for_directory('not-a-file-path')
 
 @pytest.mark.usefixtures('test_data')
 @pytest.mark.usefixtures('file_paths')

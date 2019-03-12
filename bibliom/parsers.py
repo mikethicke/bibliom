@@ -30,6 +30,9 @@ class Parser(ABC):
         self.parsed_dict = {}
         self.id_field = id_field
         self.encoding = encoding
+        self.content = None
+        self.file_path = None
+        self.directory_path = None
 
     def __getattribute__(self, name):
         if name == 'parsed_list':
@@ -49,21 +52,23 @@ class Parser(ABC):
         return Parser.__subclasses__()
 
     @staticmethod
-    def get_parser_for_content(content):
+    def get_parser_for_content(content, id_field=None, encoding=None):
         """
-        Returns a class capable of parsing content, or False if none found.
+        Returns a parser capable of parsing content, or False if none found.
         """
         if not isinstance(content, str):
             raise TypeError("content must be a string containing content to be parsed")
         for parser_class in Parser.parser_classes():
             if parser_class.is_parsable(content):
-                return parser_class
+                parser = parser_class(id_field, encoding)
+                parser.content = content
+                return parser
         return None
 
     @staticmethod
-    def get_parser_from_format_arg(format_arg):
+    def get_parser_from_format_arg(format_arg, id_field=None, encoding=None):
         """
-        Returns a parser class corresponding to formatting argument, or False
+        Returns a parser corresponding to formatting argument, or False
         if none found.
         """
         if not isinstance(format_arg, str):
@@ -71,21 +76,24 @@ class Parser(ABC):
                 'format_arg must be string containing format code for content to be parsed')
         for parser_class in Parser.parser_classes():
             if parser_class.format_arg() == format_arg:
-                return parser_class
+                parser = parser_class(id_field, encoding)
+                return parser
         return None
 
     @staticmethod
-    def get_parser_for_file(file_path):
+    def get_parser_for_file(file_path, id_field=None, encoding=None):
         """
         Returns a class capable of parsing file, or False if none found.
         """
         for parser_class in Parser.parser_classes():
             if parser_class.is_parsable_file(file_path):
-                return parser_class
+                parser = parser_class(id_field, encoding)
+                parser.file_path = file_path
+                return parser
         return None
 
     @staticmethod
-    def get_parser_for_directory(directory_path):
+    def get_parser_for_directory(directory_path, id_field=None, encoding=None):
         """
         Returns a class capable of parsing files in directory, or False if
         none found.
@@ -95,9 +103,10 @@ class Parser(ABC):
             directory_path += '/'
         for file_name in files:
             if not file_name.startswith('.'):
-                parser_class = Parser.get_parser_for_file(directory_path + file_name)
-                if parser_class:
-                    return parser_class
+                parser = Parser.get_parser_for_file(directory_path + file_name, id_field, encoding)
+                if parser:
+                    parser.directory_path = directory_path
+                    return parser
         return None
 
     @classmethod
@@ -129,17 +138,21 @@ class Parser(ABC):
         """
 
     @abstractmethod
-    def parse_content_item(self, content):
+    def parse_content_item(self, content=None):
         """
         Parses a content item into a dictionary and adds to self.parsed_list or
         self.parsed_dict.
         """
+        if content is not None:
+            self.content = content
 
     @abstractmethod
-    def parse_file(self, file_path):
+    def parse_file(self, file_path=None):
         """
         Parses a text file containing publication items.
         """
+        if file_path is not None:
+            self.file_path = file_path
 
     def parse_files(self, file_paths):
         """
@@ -152,17 +165,19 @@ class Parser(ABC):
                 except ValueError:
                     pass
 
-    def parse_directory(self, directory_path):
+    def parse_directory(self, directory_path=None):
         """
         Parses all files in a directory.
         """
-        files = os.listdir(directory_path)
-        if not str(directory_path).endswith('/'):
-            directory_path += '/'
+        if directory_path is not None:
+            self.directory_path = directory_path
+        files = os.listdir(self.directory_path)
+        if not str(self.directory_path).endswith('/'):
+            self.directory_path += '/'
         file_paths = []
         for file in files:
             if not file.startswith('.'):
-                file_paths.append(directory_path + file)
+                file_paths.append(self.directory_path + file)
         self.parse_files(file_paths)
 
     def parse_directories(self, directories):
@@ -172,12 +187,14 @@ class Parser(ABC):
         for directory in directories:
             self.parse_directory(directory)
 
-    def recursive_parse(self, directory_path):
+    def recursive_parse(self, directory_path=None):
         """
         Parse all files in directory_path, and all subdirectories.
         """
+        if directory_path is not None:
+            self.directory_path = directory_path
         files = [os.path.join(root, name)
-                 for root, _, files in os.walk(directory_path)
+                 for root, _, files in os.walk(self.directory_path)
                  for name in files]
         self.parse_files(files)
 
@@ -267,7 +284,9 @@ class WOKParser(Parser):
     # When parsing file, if file does not start with one of _valid_headers, the file will be skipped
     _valid_headers = ['FN Clarivate Analytics Web of Science']
 
-    def parse_content_item(self, content):
+    def parse_content_item(self, content=None):
+        Parser.parse_content_item(self, content)
+        content = self.content
         if not content:
             return None
         lines = content.splitlines()
@@ -354,7 +373,9 @@ class WOKParser(Parser):
                     return True
         return False
 
-    def parse_file(self, file_path):
+    def parse_file(self, file_path=None):
+        Parser.parse_file(self, file_path)
+        file_path = self.file_path
         if not self.is_parsable_file(file_path):
             raise ValueError(
                 'File %s is not parsable by %s' % (file_path, type(self).__name__))
