@@ -2,14 +2,13 @@
 Setup / fixtures for pytest.
 """
 
-import pytest
 import os
 from textwrap import dedent
 import logging
 
+import pytest
+
 from bibliom import dbmanager
-from bibliom import parsers
-from bibliom import parser_db_adapter
 from bibliom import exceptions
 
 logging.getLogger('bibliom.pytest').debug("### Beginning pytest session. ###")

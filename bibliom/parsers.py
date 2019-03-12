@@ -4,7 +4,6 @@ The parsers in this module don't interact with the database or publication
 objects directly.
 """
 
-import logging
 from abc import ABC, abstractmethod
 import os
 import re
