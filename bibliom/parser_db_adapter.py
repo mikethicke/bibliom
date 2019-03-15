@@ -10,7 +10,8 @@ import re
 import logging
 
 from bibliom import parsers
-from bibliom import dbmanager
+from bibliom.dbtable import DBTable
+from bibliom.dbentity import DBEntity
 from bibliom import publication_objects
 
 REPORT_FREQUENCY = 500
@@ -21,11 +22,11 @@ def _wok_to_db(parser, manager, duplicates=None):
     to database.
     """
     logging.getLogger(__name__).info("Importing Web of Knowledge records into database.")
-    paper_table = manager.get_table_object('paper')
-    author_table = manager.get_table_object('author')
-    journal_table = manager.get_table_object('journal')
-    paper_author_table = manager.get_table_object('paper_author')
-    keyword_table = manager.get_table_object('paper_keyword')
+    paper_table = DBTable.get_table_object(manager, 'paper')
+    author_table = DBTable.get_table_object(manager, 'author')
+    journal_table = DBTable.get_table_object(manager, 'journal')
+    paper_author_table = DBTable.get_table_object(manager, 'paper_author')
+    keyword_table = DBTable.get_table_object(manager, 'paper_keyword')
     new_paper_list = []
     logging.getLogger(__name__).info("Importing %s records into database.", len(parser.parsed_list))
     for count, record in enumerate(parser.parsed_list):
@@ -78,12 +79,12 @@ def _wok_to_db(parser, manager, duplicates=None):
         new_paper.save_to_db(duplicates)
 
         for keyword in (record.get('Keywords') or []):
-            new_keyword = dbmanager.DBEntity(keyword_table)
+            new_keyword = DBEntity(keyword_table)
             new_keyword.keyword = keyword
             new_keyword.idpaper = new_paper.idpaper
 
         if new_paper.was_retracted:
-            new_keyword = dbmanager.DBEntity(keyword_table)
+            new_keyword = DBEntity(keyword_table)
             new_keyword.keyword = 'retracted'
             new_keyword.idpaper = new_paper.idpaper
 
@@ -91,7 +92,7 @@ def _wok_to_db(parser, manager, duplicates=None):
             new_author = publication_objects.Author.from_string(
                 author_table, author_name)
             new_author.save_to_db(duplicates)
-            new_paper_author = dbmanager.DBEntity(paper_author_table)
+            new_paper_author = DBEntity(paper_author_table)
             new_paper_author.idauthor = new_author.idauthor
             new_paper_author.idpaper = new_paper.idpaper
 
@@ -129,8 +130,8 @@ def _wok_to_db(parser, manager, duplicates=None):
                 len(new_paper_list))
     logging.getLogger(__name__).info(
         "Importing %s citations into db.",
-        len(manager.get_table_object('citation').rows))
-    manager.get_table_object('citation').sync_to_db()
+        len(DBTable.get_table_object(manager, 'citation').rows))
+    DBTable.get_table_object(manager, 'citation').sync_to_db()
 
 
 def parsed_records_to_db(parser, manager):

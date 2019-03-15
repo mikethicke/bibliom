@@ -8,7 +8,7 @@ import pytest
 
 from bibliom import parser_db_adapter
 from bibliom.parsers import Parser
-from bibliom import dbmanager
+from bibliom.dbtable import DBTable
 from bibliom import publication_objects
 
 @pytest.mark.usefixtures('file_paths')
@@ -24,10 +24,10 @@ class TestParserDBAdapter():
         parser_db_adapter._wok_to_db(
             parser,
             self.manager,
-            duplicates=dbmanager.DBTable.Duplicates.SKIP
+            duplicates=DBTable.Duplicates.SKIP
         )
         papers = publication_objects.Paper.fetch_entities(
-            db_table=self.manager.get_table_object('paper'),
+            db_table=DBTable.get_table_object(self.manager, 'paper'),
             where_dict={'title': 'NOT NULL'}
         )
         assert len(papers) == 500

@@ -2,10 +2,14 @@
 This package contains scripts for parsing, storing, and analyzing bibliographic
 information, especially for the purposes of citation analysis.s
 """
+
+# pylint: disable=protected-access, invalid-name
+
 import logging
 from logging.handlers import RotatingFileHandler
 import os
 
+# Enables debug logging to logs/debug.log
 DEBUG_MODE = True
 
 # Adding custom log level for verbose info

@@ -8,7 +8,7 @@ import logging
 import pytest
 
 from bibliom.publication_objects import Paper, Author, Journal, Citation
-from bibliom import dbmanager
+from bibliom.dbtable import DBTable
 from bibliom import exceptions
 
 @pytest.mark.usefixtures('import_small_database')
@@ -23,7 +23,7 @@ class TestPaper():
         assert isinstance(new_paper, Paper)
         assert not new_paper.was_retracted
 
-        paper_table = self.manager.get_table_object('paper')
+        paper_table = DBTable.get_table_object(self.manager, 'paper')
         new_paper = Paper(db_table=paper_table)
         assert isinstance(new_paper, Paper)
         assert not new_paper.was_retracted
@@ -39,13 +39,13 @@ class TestPaper():
 
         paper = Paper(
             db_table=paper_table,
-            row_key='idpaper' + dbmanager.DBTable.KEY_STR_DELIMITER + '1'
+            row_key='idpaper' + DBTable.KEY_STR_DELIMITER + '1'
         )
         assert paper.title
 
     def test_str(self):
         logging.getLogger('bibliom.pytest').debug('-->TestPaper.test_str')
-        paper_table = self.manager.get_table_object('paper')
+        paper_table = DBTable.get_table_object(self.manager, 'paper')
         paper = Paper.fetch_entity(
             db_table=paper_table,
             where_dict={'doi': '10.1089/ars.2017.7361'}
@@ -56,7 +56,7 @@ class TestPaper():
 
     def test_authors(self):
         logging.getLogger('bibliom.pytest').debug('-->TestPaper.test_authors')
-        paper_table = self.manager.get_table_object('paper')
+        paper_table = DBTable.get_table_object(self.manager, 'paper')
         paper = Paper.fetch_entity(
             db_table=paper_table,
             where_dict={'doi': '10.1089/ars.2017.7361'}
@@ -74,7 +74,7 @@ class TestPaper():
 
     def test_journal(self):
         logging.getLogger('bibliom.pytest').debug('-->TestPaper.test_journal')
-        paper_table = self.manager.get_table_object('paper')
+        paper_table = DBTable.get_table_object(self.manager, 'paper')
         paper = Paper.fetch_entity(
             db_table=paper_table,
             where_dict={'doi': '10.1089/ars.2017.7361'}
@@ -83,7 +83,7 @@ class TestPaper():
 
     def test_cited_papers(self):
         logging.getLogger('bibliom.pytest').debug('-->TestPaper.test_cited_papers')
-        paper_table = self.manager.get_table_object('paper')
+        paper_table = DBTable.get_table_object(self.manager, 'paper')
         paper = Paper.fetch_entity(
             db_table=paper_table,
             where_dict={'doi': '10.1089/ars.2017.7361'}
@@ -101,7 +101,7 @@ class TestPaper():
 
     def test_citing_papers(self):
         logging.getLogger('bibliom.pytest').debug('-->TestPaper.test_citing_papers')
-        paper_table = self.manager.get_table_object('paper')
+        paper_table = DBTable.get_table_object(self.manager, 'paper')
         paper = Paper.fetch_entity(
             db_table=paper_table,
             where_dict={'doi': '10.1016/j.ijhydene.2016.06.178'}
@@ -119,7 +119,7 @@ class TestPaper():
 
     def test_cite(self):
         logging.getLogger('bibliom.pytest').debug('-->TestPaper.test_cite')
-        paper_table = self.manager.get_table_object('paper')
+        paper_table = DBTable.get_table_object(self.manager, 'paper')
         source_paper = Paper.fetch_entity(
             db_table=paper_table,
             where_dict={'doi': '10.1016/j.ijhydene.2016.06.178'}
@@ -162,7 +162,7 @@ class TestAuthor():
     """
     def test_init(self):
         logging.getLogger('bibliom.pytest').debug('-->TestAuthor.test_init')
-        author_table = self.manager.get_table_object('author')
+        author_table = DBTable.get_table_object(self.manager, 'author')
 
         new_author = Author(
             db_manager=self.manager
@@ -186,7 +186,7 @@ class TestAuthor():
 
         new_author = Author(
             db_table=author_table,
-            row_key='idauthor' + dbmanager.DBTable.KEY_STR_DELIMITER + '1'
+            row_key='idauthor' + DBTable.KEY_STR_DELIMITER + '1'
         )
         assert isinstance(new_author, Author)
         assert new_author.last_name
@@ -204,7 +204,7 @@ class TestAuthor():
 
     def test_from_string(self):
         logging.getLogger('bibliom.pytest').debug('-->TestAuthor.test_from_string')
-        author_table = self.manager.get_table_object('author')
+        author_table = DBTable.get_table_object(self.manager, 'author')
         new_author = Author.from_string(author_table, 'Thicke, Michael Lowell Ellis')
         assert new_author.last_name == 'Thicke'
         assert new_author.given_names == 'Michael Lowell Ellis'
@@ -215,7 +215,7 @@ class TestAuthor():
 
     def test_papers(self):
         logging.getLogger('bibliom.pytest').debug('-->TestAuthor.test_papers')
-        author_table = self.manager.get_table_object('author')
+        author_table = DBTable.get_table_object(self.manager, 'author')
 
         author = Author(
             db_table=author_table,
@@ -240,7 +240,7 @@ class TestJournal():
     """
     def test_init(self):
         logging.getLogger('bibliom.pytest').debug('-->TestJournal.test_init')
-        journal_table = self.manager.get_table_object('journal')
+        journal_table = DBTable.get_table_object(self.manager, 'journal')
 
         journal = Journal(db_manager=self.manager)
         assert isinstance(journal, Journal)
@@ -264,7 +264,7 @@ class TestJournal():
 
     def test_papers(self):
         logging.getLogger('bibliom.pytest').debug('-->TestJournal.test_papers')
-        journal_table = self.manager.get_table_object('journal')
+        journal_table = DBTable.get_table_object(self.manager, 'journal')
 
         journal = Journal.fetch_entity(
             db_table=journal_table,
@@ -282,7 +282,7 @@ class TestCitation():
     """
     def test_init(self):
         logging.getLogger('bibliom.pytest').debug('-->TestCitation.test_init')
-        citation_table = self.manager.get_table_object('citation')
+        citation_table = DBTable.get_table_object(self.manager, 'citation')
 
         citation = Citation(db_table=citation_table)
         assert isinstance(citation, Citation)
@@ -315,8 +315,8 @@ class TestCitation():
 
     def test_cite(self):
         logging.getLogger('bibliom.pytest').debug('-->TestCitation.test_cite')
-        citation_table = self.manager.get_table_object('citation')
-        paper_table = self.manager.get_table_object('paper')
+        citation_table = DBTable.get_table_object(self.manager, 'citation')
+        paper_table = DBTable.get_table_object(self.manager, 'paper')
 
         source_paper = Paper.fetch_entity(
             db_table=paper_table,
@@ -334,8 +334,8 @@ class TestCitation():
 
     def test_source_paper_target_paper(self):
         logging.getLogger('bibliom.pytest').debug('-->TestCitation.test_source_paper_target_paper')
-        citation_table = self.manager.get_table_object('citation')
-        paper_table = self.manager.get_table_object('paper')
+        citation_table = DBTable.get_table_object(self.manager, 'citation')
+        paper_table = DBTable.get_table_object(self.manager, 'paper')
 
         citation = Citation(
             db_table=citation_table,
@@ -356,11 +356,11 @@ class TestCitation():
 
         paper_1 = Paper(
             db_table=paper_table,
-            row_key='idpaper' + dbmanager.DBTable.KEY_STR_DELIMITER + '1'
+            row_key='idpaper' + DBTable.KEY_STR_DELIMITER + '1'
         )
         paper_2 = Paper(
             db_table=paper_table,
-            row_key='idpaper' + dbmanager.DBTable.KEY_STR_DELIMITER + '2'
+            row_key='idpaper' + DBTable.KEY_STR_DELIMITER + '2'
         )
         citation = Citation(db_table=citation_table)
         citation.source_paper = paper_1

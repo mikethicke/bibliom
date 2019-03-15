@@ -3,7 +3,8 @@ This module implements publication objects for a bibliometric database.
 """
 import re
 
-from bibliom.dbmanager import DBEntity
+from bibliom.dbentity import DBEntity
+from bibliom.dbtable import DBTable
 from bibliom import exceptions
 
 class Paper(DBEntity):
@@ -16,8 +17,8 @@ class Paper(DBEntity):
                 raise ValueError(
                     "When initializing, at least one of db_table and db_manager must not be None."
                 )
-            db_table = db_manager.get_table_object('paper')
-        super().__init__(db_table=db_table, row_key=row_key, fields_dict=fields_dict)
+            db_table = DBTable.get_table_object(db_manager, 'paper')
+        DBEntity.__init__(self, db_table=db_table, row_key=row_key, fields_dict=fields_dict)
 
         self.was_retracted = False
 
@@ -31,11 +32,10 @@ class Paper(DBEntity):
         """
         if self.idpaper is None:
             return []
-        dbm = self.db_table.manager
-        pa_table = dbm.get_table_object('paper_author')
+        pa_table = DBTable.get_table_object(self.db_table.manager, 'paper_author')
         paper_authors = pa_table.fetch_rows({'idpaper':self.idpaper})
         author_ids = [pa['idauthor'] for pa in paper_authors.values()]
-        author_table = dbm.get_table_object('author')
+        author_table = DBTable.get_table_object(self.db_table.manager, 'author')
         authors = Author.fetch_entities(author_table, {'idauthor':author_ids})
         return authors
 
@@ -46,7 +46,7 @@ class Paper(DBEntity):
         """
         if self.idjournal is None:
             return None
-        journal_table = self.db_table.manager.get_table_object('journal')
+        journal_table = DBTable.get_table_object(self.db_table.manager, 'journal')
         journal = Journal.fetch_entity(journal_table, {'idjournal': self.idjournal})
         return journal
 
@@ -57,8 +57,7 @@ class Paper(DBEntity):
         """
         if self.idpaper is None:
             return []
-        dbm = self.db_table.manager
-        citation_table = dbm.get_table_object('citation')
+        citation_table = DBTable.get_table_object(self.db_table.manager, 'citation')
         citations = Citation.fetch_entities(citation_table, {'source_id':self.idpaper})
         cited_papers = [Paper.fetch_entity(self.db_table, {'idpaper':c.target_id})
                         for c in citations]
@@ -71,8 +70,7 @@ class Paper(DBEntity):
         """
         if self.idpaper is None:
             return []
-        dbm = self.db_table.manager
-        citation_table = dbm.get_table_object('citation')
+        citation_table = DBTable.get_table_object(self.db_table.manager, 'citation')
         citations = Citation.fetch_entities(citation_table, {'target_id':self.idpaper})
         citing_papers = [Paper.fetch_entity(self.db_table, {'idpaper':c.source_id})
                          for c in citations]
@@ -98,8 +96,8 @@ class Author(DBEntity):
     """
     def __init__(self, db_table=None, db_manager=None, row_key=None, fields_dict=None):
         if db_table is None:
-            db_table = db_manager.get_table_object('author')
-        super().__init__(db_table=db_table, row_key=row_key, fields_dict=fields_dict)
+            db_table = DBTable.get_table_object(db_manager, 'author')
+        DBEntity.__init__(self, db_table=db_table, row_key=row_key, fields_dict=fields_dict)
 
     def __str__(self):
         return "%s, %s" % (str(self.last_name), str(self.given_names))
@@ -126,11 +124,10 @@ class Author(DBEntity):
         """
         if self.idauthor is None:
             return []
-        dbm = self.db_table.manager
-        pa_table = dbm.get_table_object('paper_author')
+        pa_table = DBTable.get_table_object(self.db_table.manager, 'paper_author')
         paper_authors = pa_table.fetch_rows({'idauthor':self.idauthor})
         paper_ids = [pa['idpaper'] for pa in paper_authors.values()]
-        paper_table = dbm.get_table_object('paper')
+        paper_table = DBTable.get_table_object(self.db_table.manager, 'paper')
         papers = Paper.fetch_entities(paper_table, {'idpaper':paper_ids})
         return papers
 
@@ -140,8 +137,8 @@ class Journal(DBEntity):
     """
     def __init__(self, db_table=None, db_manager=None, row_key=None, fields_dict=None):
         if db_table is None:
-            db_table = db_manager.get_table_object('journal')
-        super().__init__(db_table=db_table, row_key=row_key, fields_dict=fields_dict)
+            db_table = DBTable.get_table_object(db_manager, 'journal')
+        DBEntity.__init__(self, db_table=db_table, row_key=row_key, fields_dict=fields_dict)
 
     def __str__(self):
         return str(self.title)
@@ -151,7 +148,7 @@ class Journal(DBEntity):
         """
         Get list of papers contained in journal.
         """
-        paper_table = self.db_table.manager.get_table_object('paper')
+        paper_table = DBTable.get_table_object(self.db_table.manager, 'paper')
         papers = Paper.fetch_entities(paper_table, {'idjournal':self.idjournal})
         return papers
 
@@ -161,8 +158,8 @@ class Citation(DBEntity):
     """
     def __init__(self, db_table=None, db_manager=None, row_key=None, fields_dict=None):
         if db_table is None:
-            db_table = db_manager.get_table_object('citation')
-        super().__init__(db_table=db_table, row_key=row_key, fields_dict=fields_dict)
+            db_table = DBTable.get_table_object(db_manager, 'citation')
+        DBEntity.__init__(self, db_table=db_table, row_key=row_key, fields_dict=fields_dict)
 
     def cite(self, source_paper, target_paper):
         """
@@ -176,7 +173,7 @@ class Citation(DBEntity):
         """
         Returns Paper object corresponding to source paper.
         """
-        paper_table = self.db_table.manager.get_table_object('paper')
+        paper_table = DBTable.get_table_object(self.db_table.manager, 'paper')
         s_paper = Paper.fetch_entity(paper_table, {'idpaper':self.source_id})
         return s_paper
 
@@ -192,7 +189,7 @@ class Citation(DBEntity):
         """
         Returns Paper object corresponding to target paper.
         """
-        paper_table = self.db_table.manager.get_table_object('paper')
+        paper_table = DBTable.get_table_object(self.db_table.manager, 'paper')
         t_paper = Paper.fetch_entity(paper_table, {'idpaper':self.target_id})
         return t_paper
 
