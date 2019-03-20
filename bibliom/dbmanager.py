@@ -288,10 +288,18 @@ class DBManager:
                 "Error attempting to create new database with name %s", name)
             temp_db.close()
             raise
+        else:
+            logging.getLogger(__name__).debug("Created database %s", name)
 
         try:
             query = "USE %s" % name
             cursor.execute(query)
+        except MySQLdb.OperationalError:
+            logging.getLogger(__name__).exception(
+                "Error attempting to use database with name %s", name)
+            raise
+        
+        try:
             for command in sql_commands:
                 if command:
                     cursor.execute(command)
@@ -303,12 +311,13 @@ class DBManager:
         if not created_tables:
             query = "DROP DATABASE %s" % name
             cursor.execute(query)
+            temp_db.close()
             raise exceptions.FailedDatabaseCreationError("Failed to create database tables.")
 
         temp_db.close()
         self.name = name
         self._connect()
-        logging.getLogger(__name__).debug("Successfully creatted database %s", name)
+        logging.getLogger(__name__).debug("Successfully created database %s and tables.", name)
 
     def drop_database(self):
         """

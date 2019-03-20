@@ -74,6 +74,10 @@ def file_paths(request):
             'dir': os.path.join(test_root, 'webofscience-small'),
             'dirs': [os.path.join(test_root, 'webofscience-small'),
                      os.path.join(test_root, 'webofscience-small', 'more')]
+        },
+        'WCH': {
+            'file': os.path.join(test_root, 'wos-citation-history-small', 'savedrecs-5.txt'),
+            'dir': os.path.join(test_root, 'wos-citation-history-small')
         }
     }
 
@@ -166,5 +170,14 @@ def test_data(request):
             OA Green Accepted
             DA 2018-12-27
             ER
-            """)
+            """),
+        'WCH': dedent(
+            """
+            DOCUMENT TYPES: (Retracted Publication) OR TOPIC: (sdgsdfgaesrgersgsdfgergsdfgsdfgsergsdg)
+            Timespan=1980-2018. Indexes=SCI-EXPANDED, SSCI, A&HCI, CPCI-S, CPCI-SSH, ESCI.
+
+            "Title","Authors","Corporate Authors","Editors","Book Editors","Source Title","Publication Date","Publication Year","Volume","Issue","Part Number","Supplement","Special Issue","Beginning Page","Ending Page","Article Number","DOI","Conference Title","Conference Date","Total Citations","Average per Year","1980","1981","1982","1983","1984","1985","1986","1987","1988","1989","1990","1991","1992","1993","1994","1995","1996","1997","1998","1999","2000","2001","2002","2003","2004","2005","2006","2007","2008","2009","2010","2011","2012","2013","2014","2015","2016","2017","2018"
+            "RETRACTED: Primary Prevention of Cardiovascular Disease with a Mediterranean Diet (Retracted article. See vol. 378, pg. 2441, 2018)","Estruch, Ramon; Ros, Emilio; Salas-Salvado, Jordi; Covas, Maria-Isabel; Corella, Dolores; Aros, Fernando; Gomez-Gracia, Enrique; Ruiz-Gutierrez, Valentina; Fiol, Miquel; Lapetra, Jose; Maria Lamuela-Raventos, Rosa; Serra-Majem, Lluis; Pinto, Xavier; Basora, Josep; Angel Munoz, Miguel; Sorli, Jose V.; Alfredo Martinez, Jose; Angel Martinez-Gonzalez, Miguel","PREDIMED Study Investigators","","","NEW ENGLAND JOURNAL OF MEDICINE","APR 4 2013","2013","368","14","","","","1279","1290","","10.1056/NEJMoa1200303","","","1995","332.50","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","162","356","369","361","394","353"
+            """
+        )
     }

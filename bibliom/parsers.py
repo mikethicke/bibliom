@@ -7,13 +7,37 @@ objects directly.
 from abc import ABC, abstractmethod
 import os
 import re
-import chardet
+from chardet.universaldetector import UniversalDetector
 
-def detect_encoding(data):
+from bibliom import exceptions
+
+def detect_encoding(file_path):
     """
     Returns string containing (best guess of) text's encoding.
     """
-    return chardet.detect(data)['encoding']
+    CHUNK_SIZE = 400
+    MAX_SIZE = 100000
+    CONFIDENCE_THRESHOLD = 0.95
+
+    detector = UniversalDetector()
+    detector.reset()
+    current_size = 0
+    with open(file_path, 'rb') as f:
+        while True: 
+            line = f.read(CHUNK_SIZE)
+            if not line:
+                break
+            detector.feed(line)
+            if detector.done:
+                break
+            current_size += CHUNK_SIZE
+            if current_size > MAX_SIZE:
+                break
+    detector.close()
+    if detector.result['confidence'] >= CONFIDENCE_THRESHOLD:
+        return detector.result['encoding']
+    else:
+        raise exceptions.FileParseError("Cannot decode file %s", file_path)
 
 class Parser(ABC):
     """
@@ -145,6 +169,8 @@ class Parser(ABC):
         """
         if content is not None:
             self.content = content
+        if self.content is None:
+            return None
 
     @abstractmethod
     def parse_file(self, file_path=None):
@@ -162,7 +188,7 @@ class Parser(ABC):
             if os.path.isfile(file_path):
                 try:
                     self.parse_file(file_path)
-                except ValueError:
+                except exceptions.FileParseError:
                     pass
 
     def parse_directory(self, directory_path=None):
@@ -287,8 +313,10 @@ class WOKParser(Parser):
     def parse_content_item(self, content=None):
         Parser.parse_content_item(self, content)
         content = self.content
+
         if not content:
-            return None
+            return False
+
         lines = content.splitlines()
 
         record_dict = {
@@ -360,10 +388,10 @@ class WOKParser(Parser):
 
     @classmethod
     def is_parsable_file(cls, file_path, encoding=None):
+        if encoding is None:
+            encoding = detect_encoding(file_path)
         with open(file_path, 'rb') as f:
             file_data = f.read()
-            if encoding is None:
-                encoding = detect_encoding(file_data)
             try:
                 file_text = file_data.decode(encoding)
             except UnicodeDecodeError:
@@ -377,12 +405,12 @@ class WOKParser(Parser):
         Parser.parse_file(self, file_path)
         file_path = self.file_path
         if not self.is_parsable_file(file_path):
-            raise ValueError(
+            raise exceptions.FileParseError(
                 'File %s is not parsable by %s' % (file_path, type(self).__name__))
+        if self.encoding is None:
+                self.encoding = detect_encoding(file_path)
         with open(file_path, 'rb') as f:
             file_data = f.read()
-            if self.encoding is None:
-                self.encoding = detect_encoding(file_data)
             file_text = file_data.decode(self.encoding)
             records = re.split(r'\n\s*ER\s*\n', file_text)
 
@@ -392,5 +420,149 @@ class WOKParser(Parser):
             if record.startswith('EF'):
                 continue
             self.parse_content_item(record)
+
+        return True
+
+class WCHParser(Parser):
+    """
+    Parsses Web of Knowledge citation history files.
+    """
+
+    def __init__(self, id_field=None, encoding=None):
+        self.fields = []
+        self.years = []
+        Parser.__init__(self, id_field=id_field, encoding=encoding)
+
+    @staticmethod
+    def format_arg():
+        """
+        Format argument for class.
+        """
+        return 'WCH'
+
+    @staticmethod
+    def _csv_line_to_list(line):
+        """
+        Converts a comma-separated string of quoted items into a list, stripping
+        the quotes.
+        """
+        line += ','
+        quoted_items = re.findall(r'".*?",', line)
+        items = [item.strip('",') for item in quoted_items]
+        return items
+
+    def _parse_fields_line(self, line):
+        """
+        Parses field header line into self.fields list.
+        """
+        fields_list = WCHParser._csv_line_to_list(line)
+        for field in fields_list:
+            if len(field) == 4 and field.isnumeric():
+                try:
+                    self.years.append(int(field))
+                except ValueError:
+                    self.fields.append(field)
+            else:
+                self.fields.append(field)
+
+    @classmethod
+    def is_parsable_file(cls, file_path, encoding=None):
+        if encoding is None:
+                encoding = detect_encoding(file_path)
+        with open(file_path, 'rb') as f:
+            file_data = f.read()
+            try:
+                file_text = file_data.decode(encoding)
+            except UnicodeDecodeError:
+                return False
+            lines = file_text.splitlines()
+            in_header = True
+            item_count = None
+            for line in lines:
+                if in_header: # Header separated from content by blank line
+                    if not line:
+                        in_header = False
+                    continue
+                line_items = WCHParser._csv_line_to_list(line)
+                if item_count is None: 
+                    item_count = len(line_items)
+                    year_cols = False
+                    for item in line_items:
+                        if item.isnumeric():
+                            if len(item) != 4:
+                                return False
+                            year_cols = True
+                    continue
+                elif item_count != len(line_items):
+                    return False
+        if not year_cols:
+            return False
+        return True
+
+    def parse_content_item(self, content=None):
+        Parser.parse_content_item(self, content)
+        content = self.content
+
+        if not content:
+            return False
+        
+        if not self.fields or not self.years:
+            raise exceptions.ParsingError("Column headers must be parsed before content items.")
+
+        record_dict = {}
+        content_list = WCHParser._csv_line_to_list(content)
+        if content_list:
+            record_dict['Citation History'] = {}
+        if len(content_list) != len(self.fields) + len(self.years):
+            raise exceptions.ParsingError(
+                "WCHParser: Length of content line (%s) doesn't match length of fields (%s)." %
+                (len(content_list), len(self.fields) + len(self.years))
+            )
+
+        for i, content_item in enumerate(content_list):
+            if i < len(self.fields):
+                record_dict[self.fields[i]] = content_item
+            else:
+                try:
+                    record_dict['Citation History'][self.years[i - len(self.fields)]] = int(content_item)
+                except ValueError:
+                    raise exceptions.ParsingError(
+                        "Expected integer for citation history year, got: %s" % content_item
+                    )
+
+        next_missing_id = 0
+        if self.id_field is not None:
+            try:
+                self.parsed_dict[record_dict[self.id_field]] = record_dict
+            except KeyError:
+                self.parsed_dict[self.MISSING_ID_PREFIX + str(next_missing_id)] = record_dict
+                next_missing_id += 1
+        else:
+            self.parsed_list.append(record_dict)
+
+    def parse_file(self, file_path=None):
+        Parser.parse_file(self, file_path)
+        file_path = self.file_path
+        if not self.is_parsable_file(file_path):
+            raise exceptions.FileParseError(
+                'File %s is not parsable by %s' % (file_path, type(self).__name__))
+        if self.encoding is None:
+                self.encoding = detect_encoding(file_path)
+
+        with open(file_path, 'rb') as f:
+            file_data = f.read()
+            file_text = file_data.decode(self.encoding)
+
+        lines = file_text.splitlines()
+        in_header = True
+        for line in lines:
+            if in_header:
+                if not line:
+                    in_header = False
+                continue
+            if not self.fields:
+                self._parse_fields_line(line)
+                continue
+            self.parse_content_item(line)
 
         return True

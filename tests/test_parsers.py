@@ -8,7 +8,8 @@ import logging
 
 import pytest
 
-from bibliom.parsers import Parser, WOKParser
+from bibliom.parsers import Parser, WOKParser, WCHParser
+from bibliom import exceptions
 
 @pytest.mark.usefixtures('test_data')
 @pytest.mark.usefixtures('file_paths')
@@ -43,6 +44,8 @@ class TestParser():
         logging.getLogger('bibliom.pytest').debug('-->TestParser.test_get_parser_from_format_arg')
         parser = Parser.get_parser_from_format_arg('WOK')
         assert isinstance(parser, WOKParser)
+        parser = Parser.get_parser_from_format_arg('WCH')
+        assert isinstance(parser, WCHParser)
 
         parser = Parser.get_parser_from_format_arg('asdfdsa')
         assert parser is None
@@ -55,8 +58,12 @@ class TestParser():
 
     def test_get_parser_for_file(self):
         logging.getLogger('bibliom.pytest').debug('-->TestParser.test_get_parser_for_file')
+
         parser = Parser.get_parser_for_file(self.file_paths['WOK']['file'])
         assert isinstance(parser, WOKParser)
+
+        parser = Parser.get_parser_for_file(self.file_paths['WCH']['file'])
+        assert isinstance(parser, WCHParser)
 
         parser = Parser.get_parser_for_file(self.file_paths['junk']['file'])
         assert parser is None
@@ -66,8 +73,12 @@ class TestParser():
 
     def test_get_parser_for_directory(self):
         logging.getLogger('bibliom.pytest').debug('-->TestParser.test_get_parser_for_directory')
+
         parser = Parser.get_parser_for_directory(self.file_paths['WOK']['dir'])
         assert isinstance(parser, WOKParser)
+
+        parser = Parser.get_parser_for_directory(self.file_paths['WCH']['dir'])
+        assert isinstance(parser, WCHParser)
 
         parser = Parser.get_parser_for_directory(self.file_paths['junk']['dir'])
         assert parser is None
@@ -115,7 +126,7 @@ class TestWOKParser():
         record_dict = parser.parsed_dict['10.1016/j.solmat.2018.05.055']
         assert record_dict['Unique Article Identifier'] == 'WOS:000437816100063'
 
-        with pytest.raises(ValueError):
+        with pytest.raises(exceptions.FileParseError):
             parser.parse_file(self.file_paths['junk']['file'])
 
     def test_parse_directory(self):
@@ -143,3 +154,65 @@ class TestWOKParser():
         parser = WOKParser("Unique Article Identifier")
         parser.recursive_parse(self.file_paths['WOK']['dir'])
         assert parser.parsed_dict['WOS:000299096400065']['DOI'] == '10.1016/j.egypro.2011.10.265'
+
+@pytest.mark.usefixtures('test_data')
+@pytest.mark.usefixtures('file_paths')
+class TestWCHParser():
+    """
+    Unit tests for WCHParser class.
+    """
+    def test_format_arg(self):
+        logging.getLogger('bibliom.pytest').debug('-->TestWCHParser.test_format_arg')
+        assert WCHParser.format_arg() == 'WCH'
+
+    def test_csv_line_to_list(self):
+        logging.getLogger('bibliom.pytest').debug('-->TestWCHParser.test_csv_line_to_list')
+        test_line = '"RETRACTED: Ileal-lymphoid-nodular hyperplasia, non-specific colitis, and pervasive developmental disorder in children (Retracted article. See vol 375, pg 445, 2010)","Wakefield, AJ; Murch, SH; Anthony, A; Linnell, J; Casson, DM; Malik, M; Berelowitz, M; Dhillon, AP; Thomson, MA; Harvey, P; Valentine, A; Davies, SE; Walker-Smith, JA","","","","LANCET","FEB 28 1998","1998","351","9103","","","","637","641","","10.1016/S0140-6736(97)11096-0","","","1233","58.71","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","34","28","31","53","70","63","60","47","52","56","54","61","80","86","80","65","70","70","58","58","56"'
+        line_list = WCHParser._csv_line_to_list(test_line)
+        assert isinstance(line_list, list)
+        for item in line_list:
+            assert isinstance(item, str)
+        for i, ch in enumerate(line_list[0]):
+            assert ch == test_line[i+1]
+    
+    def test_is_parsable_file(self):
+        logging.getLogger('bibliom.pytest').debug('-->TestWCHParser.test_is_parsable_file') 
+        parser = WCHParser()
+        assert parser.is_parsable_file(self.file_paths['WCH']['file'])
+        assert not parser.is_parsable_file(self.file_paths['WOK']['file'])
+        assert not parser.is_parsable_file(self.file_paths['junk']['file'])
+
+    def test_parse_file(self):
+        logging.getLogger('bibliom.pytest').debug('-->TestWCHParser.test_parse_file')
+        parser = WCHParser('DOI')
+        parser.parse_file(self.file_paths['WCH']['file'])
+        record_dict = parser.parsed_dict['10.1038/nature07404']
+        assert record_dict['Source Title'] == 'NATURE'
+        assert len(record_dict['Citation History'].items()) == 39
+        assert record_dict['Citation History'][2018] == 8
+
+        with pytest.raises(exceptions.FileParseError):
+            parser.parse_file(self.file_paths['junk']['file'])
+
+    def test_parse_directory(self):
+        logging.getLogger('bibliom.pytest').debug('-->TestWCHParser.test_parse_file')
+        parser = WCHParser('DOI')
+        parser.parse_directory(self.file_paths['WCH']['dir'])
+        assert parser.parsed_dict['10.1172/JCI60214']['Source Title'] == 'JOURNAL OF CLINICAL INVESTIGATION'
+        assert parser.parsed_dict['10.1172/JCI60214']['Citation History'][2017] == 7
+
+        parser2 = WCHParser()
+        parser2.parse_directory(self.file_paths['junk']['dir'])
+        assert not parser2.parsed_list
+ 
+
+
+
+
+
+
+
+
+
+
+

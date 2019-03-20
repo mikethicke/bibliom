@@ -25,3 +25,13 @@ class DBUnsyncedError(BiblioException):
     done.
     """
 
+class ParsingError(BiblioException):
+    """
+    Raised when there is an error parsing records.
+    """
+
+class FileParseError(ParsingError):
+    """
+    Raised when a text file cannot be decoded or parsed.
+    """
+
