@@ -1,9 +1,3 @@
--- MySQL Workbench Forward Engineering
-
-SET @OLD_UNIQUE_CHECKS=@@UNIQUE_CHECKS, UNIQUE_CHECKS=0;
-SET @OLD_FOREIGN_KEY_CHECKS=@@FOREIGN_KEY_CHECKS, FOREIGN_KEY_CHECKS=0;
-SET @OLD_SQL_MODE=@@SQL_MODE, SQL_MODE='TRADITIONAL,ALLOW_INVALID_DATES';
-
 CREATE TABLE IF NOT EXISTS `author` (
   `idauthor` INT(11) NOT NULL AUTO_INCREMENT,
   `given_names` VARCHAR(500) NULL DEFAULT NULL,
@@ -13,6 +7,7 @@ CREATE TABLE IF NOT EXISTS `author` (
   `corporate` INT(1) NULL DEFAULT '0',
   PRIMARY KEY (`idauthor`),
   UNIQUE INDEX `orcid_UNIQUE` (`orcid` ASC))
+ENGINE = InnoDB
 DEFAULT CHARACTER SET = utf8mb4;
 
 CREATE TABLE IF NOT EXISTS `journal` (
@@ -44,7 +39,8 @@ CREATE TABLE IF NOT EXISTS `paper` (
   `wos_identifier` VARCHAR(150) NULL DEFAULT NULL,
   `total_citations` INT(11) NULL DEFAULT NULL,
   `citation_record` LONGTEXT NULL DEFAULT NULL,
-  `retracted_year` YEAR NULL DEFAULT NULL,
+  `retracted_year` YEAR(4) NULL DEFAULT NULL,
+  `citation_history` TEXT NULL DEFAULT NULL,
   PRIMARY KEY (`idpaper`),
   UNIQUE INDEX `idx_paper_doi` (`doi` ASC),
   UNIQUE INDEX `wos_identifier_UNIQUE` (`wos_identifier` ASC),
@@ -54,6 +50,7 @@ CREATE TABLE IF NOT EXISTS `paper` (
     REFERENCES `journal` (`idjournal`)
     ON DELETE NO ACTION
     ON UPDATE CASCADE)
+ENGINE = InnoDB
 DEFAULT CHARACTER SET = utf8mb4;
 
 CREATE TABLE IF NOT EXISTS `citation` (
@@ -71,21 +68,7 @@ CREATE TABLE IF NOT EXISTS `citation` (
     REFERENCES `paper` (`idpaper`)
     ON DELETE CASCADE
     ON UPDATE CASCADE)
-DEFAULT CHARACTER SET = utf8mb4;
-
-CREATE TABLE IF NOT EXISTS `citation_history` (
-  `idcitation_history` INT(11) NOT NULL,
-  `idpaper` INT(11) NULL DEFAULT NULL,
-  `start_year` YEAR(4) NULL DEFAULT NULL,
-  `yearly_citations` TEXT NULL DEFAULT NULL,
-  `year_count` INT(11) NULL DEFAULT NULL,
-  PRIMARY KEY (`idcitation_history`),
-  INDEX `fk_citation_history_paper_idx` (`idpaper` ASC),
-  CONSTRAINT `fk_citation_history_paper`
-    FOREIGN KEY (`idpaper`)
-    REFERENCES `paper` (`idpaper`)
-    ON DELETE NO ACTION
-    ON UPDATE NO ACTION)
+ENGINE = InnoDB
 DEFAULT CHARACTER SET = utf8mb4;
 
 CREATE TABLE IF NOT EXISTS `modularity_measure` (
@@ -93,6 +76,7 @@ CREATE TABLE IF NOT EXISTS `modularity_measure` (
   `label` VARCHAR(45) NULL DEFAULT NULL,
   `description` VARCHAR(1024) NULL DEFAULT NULL,
   PRIMARY KEY (`measure`))
+ENGINE = InnoDB
 DEFAULT CHARACTER SET = utf8mb4;
 
 CREATE TABLE IF NOT EXISTS `modularity_class` (
@@ -108,6 +92,7 @@ CREATE TABLE IF NOT EXISTS `modularity_class` (
     REFERENCES `modularity_measure` (`measure`)
     ON DELETE CASCADE
     ON UPDATE CASCADE)
+ENGINE = InnoDB
 DEFAULT CHARACTER SET = utf8mb4;
 
 CREATE TABLE IF NOT EXISTS `network` (
@@ -117,6 +102,7 @@ CREATE TABLE IF NOT EXISTS `network` (
   `ref_column` VARCHAR(45) NOT NULL DEFAULT 'idpaper',
   `directed` TINYINT(1) NOT NULL DEFAULT '0',
   PRIMARY KEY (`network_key`))
+ENGINE = InnoDB
 DEFAULT CHARACTER SET = utf8mb4;
 
 CREATE TABLE IF NOT EXISTS `network_edges` (
@@ -145,6 +131,7 @@ CREATE TABLE IF NOT EXISTS `network_edges` (
     REFERENCES `paper` (`idpaper`)
     ON DELETE NO ACTION
     ON UPDATE NO ACTION)
+ENGINE = InnoDB
 DEFAULT CHARACTER SET = utf8mb4;
 
 CREATE TABLE IF NOT EXISTS `paper_author` (
@@ -163,6 +150,7 @@ CREATE TABLE IF NOT EXISTS `paper_author` (
     REFERENCES `paper` (`idpaper`)
     ON DELETE CASCADE
     ON UPDATE CASCADE)
+ENGINE = InnoDB
 DEFAULT CHARACTER SET = utf8mb4;
 
 CREATE TABLE IF NOT EXISTS `paper_keyword` (
@@ -176,6 +164,7 @@ CREATE TABLE IF NOT EXISTS `paper_keyword` (
     REFERENCES `paper` (`idpaper`)
     ON DELETE CASCADE
     ON UPDATE CASCADE)
+ENGINE = InnoDB
 DEFAULT CHARACTER SET = utf8mb4;
 
 CREATE TABLE IF NOT EXISTS `paper_modularity_class` (
@@ -194,8 +183,6 @@ CREATE TABLE IF NOT EXISTS `paper_modularity_class` (
     REFERENCES `paper` (`idpaper`)
     ON DELETE CASCADE
     ON UPDATE CASCADE)
+ENGINE = InnoDB
 DEFAULT CHARACTER SET = utf8mb4;
 
-SET SQL_MODE=@OLD_SQL_MODE;
-SET FOREIGN_KEY_CHECKS=@OLD_FOREIGN_KEY_CHECKS;
-SET UNIQUE_CHECKS=@OLD_UNIQUE_CHECKS;

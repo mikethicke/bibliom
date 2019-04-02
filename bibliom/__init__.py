@@ -30,6 +30,7 @@ logging.Logger.verbose_info = verbose_info
 
 logging.getLogger(__name__).addHandler(logging.NullHandler())
 
+# In debug mode, debug messages are logged to logs/debug.log
 if DEBUG_MODE:
     debug_handler = RotatingFileHandler(os.path.join(
         os.path.abspath(os.path.join(os.path.dirname(__file__), '..')),
@@ -43,5 +44,14 @@ if DEBUG_MODE:
     debug_handler.setFormatter(debug_formatter)
     logging.getLogger(__name__).addHandler(debug_handler)
     logging.getLogger(__name__).setLevel(logging.DEBUG)
+
+# Expose main objects and methods to user.
+# pylint: disable=wrong-import-position
+from .dbmanager import DBManager
+from .dbtable import DBTable
+from .dbentity import DBEntity
+from .publication_objects import Paper, Author, Journal, Citation
+from .parsers import Parser, WOKParser, WCHParser
+from .parser_db_adapter import parsed_records_to_db
 
 logging.getLogger(__name__).debug("Init complete.")

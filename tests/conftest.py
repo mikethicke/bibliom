@@ -52,11 +52,8 @@ def import_small_database(connected_manager):
     sql_file = os.path.join(
         os.path.abspath(os.path.join(os.path.dirname(__file__), "..")),
         'test_data',
-        'webofscience-small',
-        'webofscience-small.sql')
+        'small-test-database.sql')
     connected_manager._run_sql_file(sql_file)
-    yield
-    connected_manager.reset_database()
 
 @pytest.fixture(scope='class')
 def file_paths(request):

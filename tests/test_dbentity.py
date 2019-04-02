@@ -36,6 +36,19 @@ class TestDBEntity():
 
         entity4 = DBEntity(paper_table)
         assert entity4.title is None
+    
+    def test_repr(self):
+        logging.getLogger('bibliom.pytest').debug('-->TestDBEntity.test_repr')
+        self.manager.reset_database()
+        paper_table = DBTable.get_table_object(self.manager, 'paper')
+        paper_dict = {
+            'title':    'A Paper',
+            'url':      "http://mikethicke.com",
+            'idpaper':  1
+        }
+        entity = DBEntity(paper_table, fields_dict=paper_dict)
+        rt = repr(entity)
+        assert isinstance(rt, str)
 
     def test_getattr(self):
         logging.getLogger('bibliom.pytest').debug('-->TestDBEntity.test_getattr')

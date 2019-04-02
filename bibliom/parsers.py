@@ -67,6 +67,9 @@ class Parser(ABC):
                 return object.__getattribute__(self, 'parsed_list')
         else:
             return object.__getattribute__(self, name)
+    
+    def __str__(self):
+        return self.description() + " parser"
 
     @staticmethod
     def parser_classes():
@@ -160,6 +163,13 @@ class Parser(ABC):
         """
         Returns a string containing the format argument corresponding to this class
         """
+    
+    @staticmethod
+    def description():
+        """
+        Returns a string containing a brief description of the parser.
+        """
+        return "Generic"
 
     @abstractmethod
     def parse_content_item(self, content=None):
@@ -235,6 +245,13 @@ class WOKParser(Parser):
         Format argument code for class.
         """
         return 'WOK'
+    
+    @staticmethod
+    def description():
+        """
+        Returns a string containing a brief description of the parser.
+        """
+        return "Web of Science / Web of Knowledge"
 
     #Map from Web of Knowledge field codes to more informative names.
     _field_tags = {
@@ -428,6 +445,32 @@ class WCHParser(Parser):
     Parsses Web of Knowledge citation history files.
     """
 
+    #
+    # WCH Column Headers:
+    # "Title","Authors","Corporate Authors","Editors","Book Editors","Source Title",
+    # "Publication Date","Publication Year","Volume","Issue","Part Number",
+    # "Supplement","Special Issue","Beginning Page","Ending Page","Article Number",
+    # "DOI","Conference Title","Conference Date","Total Citations","Average per Year",
+    # "1980","1981","1982","1983","1984","1985","1986","1987","1988","1989","1990",
+    # "1991","1992","1993","1994","1995","1996","1997","1998","1999","2000","2001",
+    # "2002","2003","2004","2005","2006","2007","2008","2009","2010","2011","2012",
+    # "2013","2014","2015","2016","2017","2018"
+    #
+    # WCH Record: 
+    # "RETRACTED: Primary Prevention of Cardiovascular Disease with a 
+    # Mediterranean Diet (Retracted article. See vol. 378, pg. 2441, 2018)",
+    # "Estruch, Ramon; Ros, Emilio; Salas-Salvado, Jordi; Covas, Maria-Isabel; 
+    # Corella, Dolores; Aros, Fernando; Gomez-Gracia, Enrique; Ruiz-Gutierrez, 
+    # Valentina; Fiol, Miquel; Lapetra, Jose; Maria Lamuela-Raventos, Rosa;
+    # Serra-Majem, Lluis; Pinto, Xavier; Basora, Josep; Angel Munoz, Miguel;
+    # Sorli, Jose V.; Alfredo Martinez, Jose; Angel Martinez-Gonzalez, Miguel",
+    # "PREDIMED Study Investigators","","","NEW ENGLAND JOURNAL OF MEDICINE",
+    # "APR 4 2013","2013","368","14","","","","1279","1290","",
+    # "10.1056/NEJMoa1200303","","","1995","332.50","0","0","0","0","0","0","0"
+    # ,"0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0",
+    # "0","0","0","0","0","0","0","0","162","356","369","361","394","353"
+    #
+
     def __init__(self, id_field=None, encoding=None):
         self.fields = []
         self.years = []
@@ -439,6 +482,13 @@ class WCHParser(Parser):
         Format argument for class.
         """
         return 'WCH'
+    
+    @staticmethod
+    def description():
+        """
+        Returns a string containing a brief description of the parser.
+        """
+        return "Web of Science / Web of Knowledge citation history"
 
     @staticmethod
     def _csv_line_to_list(line):
@@ -468,7 +518,7 @@ class WCHParser(Parser):
     @classmethod
     def is_parsable_file(cls, file_path, encoding=None):
         if encoding is None:
-                encoding = detect_encoding(file_path)
+            encoding = detect_encoding(file_path)
         with open(file_path, 'rb') as f:
             file_data = f.read()
             try:
@@ -484,7 +534,7 @@ class WCHParser(Parser):
                         in_header = False
                     continue
                 line_items = WCHParser._csv_line_to_list(line)
-                if item_count is None: 
+                if item_count is None:
                     item_count = len(line_items)
                     year_cols = False
                     for item in line_items:
@@ -521,13 +571,15 @@ class WCHParser(Parser):
 
         for i, content_item in enumerate(content_list):
             if i < len(self.fields):
-                record_dict[self.fields[i]] = content_item
+                if self.fields[i] == 'Authors':
+                    content_item = content_item.split(';') or None
+                record_dict[self.fields[i]] = content_item or None
             else:
                 try:
                     record_dict['Citation History'][self.years[i - len(self.fields)]] = int(content_item)
                 except ValueError:
                     raise exceptions.ParsingError(
-                        "Expected integer for citation history year, got: %s" % content_item
+                        "WCHParser: Expected integer for citation history year, got: %s" % content_item
                     )
 
         next_missing_id = 0

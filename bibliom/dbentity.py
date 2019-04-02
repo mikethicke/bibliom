@@ -46,6 +46,24 @@ class DBEntity:
         except AttributeError:
             return False
 
+    def __repr__(self):
+        rep_string = ""
+        max_key_length = len(max(self.fields_dict.keys(), key=len))
+        max_key_length = max(max_key_length, len("Table"))
+        class_name = type(self).__name__
+        rep_string += "<<%s instance>>\n" % class_name
+        rep_string += "{:{max_key_length}}: {}\n".format(
+            "Table: ", self.db_table.table_name, max_key_length=max_key_length)
+        for key, value in self.fields_dict.items():
+            if value:
+                value = str(value)
+                value = value.replace('\n', ' ')
+                if len(value) > 50:
+                    value = value[:47] + '...'
+                rep_string += "{:{max_key_length}}: {}\n".format(
+                    key, value, max_key_length=max_key_length)
+        return rep_string
+
     @classmethod
     def entities_from_table_rows(cls, db_table, rows):
         """

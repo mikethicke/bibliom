@@ -33,6 +33,25 @@ class DBTable:
     def __str__(self):
         return "%s|%s" % (self.manager, self.table_name)
 
+    def __repr__(self):
+        rep_string = (
+            "{:12}: {}\n".format("Table Name", self.table_name) +
+            "{:12}: {}\n".format("Total Rows", self.row_count) +
+            "{:12}: {}\n".format("Cached Rows", len(self.rows)) +
+            "Fields:\n"
+        )
+        field_length = len(max(self.table_structure().keys(), key=len))
+        for field, attributes in self.table_structure().items():
+            if attributes['key'] == 'UNI':
+                key_str = 'Unique'
+            elif attributes['key'] == 'PRI':
+                key_str = 'Primary Key'
+            else:
+                key_str = ''
+            rep_string += "   {:{field_length}}: {:15} {}\n".format(
+                field, attributes['type'], key_str, field_length=field_length)
+        return rep_string
+
     KEY_STR_DELIMITER = "%%"
 
     @staticmethod
@@ -109,6 +128,10 @@ class DBTable:
         Returns structure of table as dictionary of fields.
         """
         return self.manager.table_structure(self.table_name)
+    
+    @property
+    def row_count(self):
+        return self.manager.table_row_count(self.table_name)
 
     def fetch_rows(self, where_dict=None, limit=0, overwrite=True):
         """
@@ -162,12 +185,14 @@ class DBTable:
         How to handle duplicate entries when inserting rows.
 
         SKIP: Skip inserting the row, leaving original entry unchanged.
-        MERGE: New values overwrite old values but unset fields in new row left unchanged.
-        OVERWRITE: Old row is dropped and new row inserted in its place.
+        INSERT: Insert new value if old value is unset 
+        OVERWRITE: New values overwrite old values but unset fields in new row left unchanged.
+        REPLACE: Old row is dropped and new row inserted in its place.
         """
         SKIP = 1
-        MERGE = 2
+        INSERT = 2
         OVERWRITE = 3
+        REPLACE = 4
 
     def insert_row(self, row_dict, duplicates=None):
         """
@@ -186,7 +211,7 @@ class DBTable:
             new_pri_key = self.manager.insert_row(self.table_name, row_dict)
             duplicate_entry = False
         except MySQLdb.IntegrityError as e:
-            if e.args[0] == 1062: #Duplicate entr
+            if e.args[0] == 1062: #Duplicate entry
                 m = re.match('Duplicate entry \'(.*)\' for key', e.args[1])
                 if m is not None:
                     duplicate_value = m.group(1)
@@ -196,26 +221,54 @@ class DBTable:
 
         if duplicate_entry:
             duplicate_key = None
+            pkey_dict = {}
+            unique_dict_list = []
+            old_row = {}
             for key, value in row_dict.items():
-                if str(value) == duplicate_value:
-                    duplicate_key = DBTable.dict_to_key({key:value})
-                    break
-            if duplicate_key:
-                old_row = self.get_row_by_key(duplicate_key)
-            else:
-                old_row = self.fetch_rows(row_dict)
-                if old_row:
-                    return duplicate_key
-                else:
-                    return None
+                if not value:
+                    pass
+                elif self.table_structure()[key]['key'] == 'PRI':
+                    pkey_dict[key] = value
+                elif self.table_structure()[key]['key'] == 'UNI':
+                    unique_dict_list.append({key:value})
+            if pkey_dict:
+                old_row = self.fetch_rows(pkey_dict)
+            if not old_row:
+                for unique_dict in unique_dict_list:
+                    old_row = self.fetch_rows(unique_dict)
+                    if old_row:
+                        break
+            if not old_row:
+                raise exceptions.DBIntegrityError(
+                    'Duplicate entry found when inserting row, but no duplicate row found.'
+                )
+            if len(old_row) != 1:
+                raise exceptions.DBIntegrityError(
+                    ('One row expected, but %d returned when fetching duplicate row.\n' % 
+                        len(old_row)) +
+                    ('Row: %s\n' % str(old_row)) +
+                    ('Row dict: %s' % str(row_dict_copy))
+                )
+            duplicate_key = list(old_row.keys())[0]
+                
             if duplicates == self.Duplicates.SKIP:
                 return duplicate_key
-            elif duplicates == self.Duplicates.OVERWRITE:
+            elif duplicates == self.Duplicates.REPLACE:
                 self.delete_row(duplicate_key)
                 return self.insert_row(row_dict, duplicates)
-            elif duplicates == self.Duplicates.MERGE:
-                for key, value in row_dict.items():
+            elif duplicates == self.Duplicates.OVERWRITE:
+                for key, value in row_dict.copy().items():
                     if not value:
+                        del row_dict[key]
+                if self.update_row(duplicate_key, row_dict):
+                    self.row_status[duplicate_key] = DBTable.RowStatus.SYNCED
+                    for key, value in row_dict.items():
+                        self.rows[duplicate_key][key] = value
+                return duplicate_key
+            elif duplicates == self.Duplicates.INSERT:
+                old_row = self.get_row_by_key(duplicate_key)
+                for key, value in row_dict.copy().items():
+                    if not value or old_row[key]:
                         del row_dict[key]
                 if self.update_row(duplicate_key, row_dict):
                     self.row_status[duplicate_key] = DBTable.RowStatus.SYNCED
@@ -384,10 +437,10 @@ class DBTable:
                     self.row_status[row_key] = DBTable.RowStatus.SYNCED
                 else:
                     raise exceptions.BiblioException('In DBTable.sync_to_db: Row failed to update.')
-            if len(row_keys) >= INFO_THRESHOLD and count % REPORT_FREQUENCY == 0:
+            if len(row_keys) >= INFO_THRESHOLD and (count + 1) % REPORT_FREQUENCY == 0:
                 logging.getLogger(__name__).verbose_info(
                     "Synced %s / %s rows to db.",
-                    count,
+                    count + 1,
                     len(row_keys)
                 )
         return new_row_key

@@ -36,7 +36,25 @@ class DBManager:
         self.close()
 
     def __str__(self):
-        return self.name
+        return str(self.name)
+    
+    def __repr__(self):
+        table_list = self.list_tables()
+        table_names = ""
+        for table in table_list:
+            if table_names:
+                table_names += ', '
+            table_names += str(table)
+        table_names += " (%s total)" % len(table_list)
+        rep_string = (
+            "{:15}: {}\n".format("Database Name", str(self.name)) +
+            "{:15}: {}\n".format("Database User", str(self.user))
+        )
+        if self.db is None:
+            rep_string += "<<Disconnected>>"
+        else:
+            rep_string += "{:15}: {}".format("Tables", table_names)
+        return rep_string
 
     def _connect(self):
         """
@@ -382,6 +400,26 @@ class DBManager:
         Returns:
             dictionary of dictionaries where outer dictionary is keyed on
             field name, and inner dictionary on attribute names
+
+        {
+            'doi': {'type': 'varchar(150)', 'null': 'YES', 'key': 'UNI', 'default': None, 'extra': ''},
+            'title': {'type': 'varchar(1000)', 'null': 'YES', 'key': '', 'default': None, 'extra': ''},
+            'publication_date': {'type': 'date', 'null': 'YES', 'key': '', 'default': None, 'extra': ''},
+            'abstract': {'type': 'text', 'null': 'YES', 'key': '', 'default': None, 'extra': ''},
+            'open_access': {'type': 'tinyint(1)', 'null': 'YES', 'key': '', 'default': None, 'extra': ''},
+            'url': {'type': 'varchar(2083)', 'null': 'YES', 'key': '', 'default': None, 'extra': ''},
+            'idjournal': {'type': 'int(11)', 'null': 'YES', 'key': 'MUL', 'default': None, 'extra': ''},
+            'idpaper': {'type': 'int(11)', 'null': 'NO', 'key': 'PRI', 'default': None, 'extra': 'auto_increment'},
+            'first_page': {'type': 'varchar(10)', 'null': 'YES', 'key': '', 'default': None, 'extra': ''},
+            'last_page': {'type': 'varchar(10)', 'null': 'YES', 'key': '', 'default': None, 'extra': ''},
+            'time_added': {'type': 'datetime', 'null': 'YES', 'key': '', 'default': None, 'extra': ''},
+            'content': {'type': 'longtext', 'null': 'YES', 'key': '', 'default': None, 'extra': ''},
+            'cited_records': {'type': 'longtext', 'null': 'YES', 'key': '', 'default': None, 'extra': ''},
+            'wos_identifier': {'type': 'varchar(150)', 'null': 'YES', 'key': 'UNI', 'default': None, 'extra': ''},
+            'total_citations': {'type': 'int(11)', 'null': 'YES', 'key': '', 'default': None, 'extra': ''},
+            'citation_record': {'type': 'longtext', 'null': 'YES', 'key': '', 'default': None, 'extra': ''},
+            'retracted_year': {'type': 'year(4)', 'null': 'YES', 'key': '', 'default': None, 'extra': ''}
+        }
         """
         if self.db is not None:
             query = "DESCRIBE %s;" % (str(table_name, ))
@@ -451,6 +489,21 @@ class DBManager:
         if table_dict:
             return list(table_dict.keys())
         return []
+    
+    def table_row_count(self, table_name):
+        """
+        Returns total number of rows in table_name.
+        """
+        query = "SELECT COUNT(*) FROM %s" % table_name
+        cursor = self.db.cursor()
+        try:
+            cursor.execute(query)
+        except MySQLdb.Error as e:
+            logging.getLogger(__name__).exception(
+                "Failed to execute query. Query: %s Error: %s", query, e)
+            raise
+        result = cursor.fetchone()
+        return int(result[0])
 
     def existing_table_object_keys(self):
         """
@@ -613,6 +666,8 @@ class DBManager:
         Returns:
             True if at least one row is updated, False otherwise.
         """
+        if not row_dict:
+            return False
         params = DBManager._query_params(row_dict)
         (where_clause, where_values) = DBManager._build_where(where_dict)
         query = ("UPDATE %s SET %s WHERE %s" %

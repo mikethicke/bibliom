@@ -25,6 +25,12 @@ class DBUnsyncedError(BiblioException):
     done.
     """
 
+class DBIntegrityError(BiblioException):
+    """
+    Raise when an assumption about the content of the database has been violated,
+    suggesting that the integrity of its data is suspect.
+    """
+
 class ParsingError(BiblioException):
     """
     Raised when there is an error parsing records.

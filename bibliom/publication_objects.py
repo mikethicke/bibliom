@@ -76,6 +76,33 @@ class Paper(DBEntity):
                          for c in citations]
         return citing_papers
 
+    @property
+    def yearly_citations(self):
+        """
+        Returns dictionary of yearly citations.
+        """
+        citation_dict = {}
+        year_strs = self.citation_history.split(';')
+        for year_str in year_strs:
+            year, citation_count = year_str.split(':')
+            citation_dict[int(year)] = int(citation_count)
+        return citation_dict
+
+    @yearly_citations.setter
+    def yearly_citations(self, citations_dict=None):
+        """
+        Set yearly citations from citations_dict, {year:citation_count}.
+        """
+        if citations_dict is None:
+            self.citation_history = None
+            return
+        citations_str = ''
+        for year, citation_count in citations_dict.items():
+            if citations_str:
+                citations_str += ';'
+            citations_str += "%s:%s" % (year, citation_count)
+        self.citation_history = citations_str
+
     def cite(self, target):
         """
         Create a citation from self to target paper and return it.

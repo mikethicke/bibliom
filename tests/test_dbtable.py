@@ -30,6 +30,12 @@ class TestDBTable:
         logging.getLogger('bibliom.pytest').debug('-->TestDBTable.test_str')
         table = DBTable.get_table_object(self.manager, 'paper')
         assert str(table) == 'test_db|paper'
+    
+    def test_repr(self):
+        logging.getLogger('bibliom.pytest').debug('-->TestDBTable.test_repr')
+        table = DBTable.get_table_object(self.manager, 'paper')
+        tr = repr(table)
+        assert isinstance(tr, str)
 
     def test_dict_to_key(self):
         logging.getLogger('bibliom.pytest').debug('-->TestDBTable.test_dict_to_key')
@@ -129,6 +135,12 @@ class TestDBTable:
             },
             {
                 'tile':     'A Bad Title'
+            },
+            {
+                'title':    'Another Duplicate Paper',
+                'abstract': "A duplicate paper's abstract",
+                'doi':      "10.1038/nature16193",
+                'idpaper':  1
             }
         ]
         citation_rows = [
@@ -166,17 +178,25 @@ class TestDBTable:
         assert row['abstract'] is None
         assert row['url'] == "http://mikethicke.com"
 
-        paper_table.insert_row(paper_rows[3], paper_table.Duplicates.MERGE)
+        paper_table.insert_row(paper_rows[3], paper_table.Duplicates.OVERWRITE)
         row = paper_table.get_row_by_key('idpaper%%1')
         assert row['title'] == 'A Duplicate Paper'
         assert row['abstract'] == "A duplicate paper's abstract"
         assert row['url'] == "http://mikethicke.com"
 
-        paper_table.insert_row(paper_rows[3], paper_table.Duplicates.OVERWRITE)
+        paper_table.insert_row(paper_rows[3], paper_table.Duplicates.REPLACE)
         row = paper_table.get_row_by_key('idpaper%%1')
         assert row['title'] == 'A Duplicate Paper'
         assert row['abstract'] == "A duplicate paper's abstract"
         assert row['url'] is None
+
+        paper_table.insert_row(paper_rows[0], paper_table.Duplicates.REPLACE)
+        paper_table.insert_row(paper_rows[5], paper_table.Duplicates.INSERT)
+        row = paper_table.get_row_by_key('idpaper%%1')
+        assert row['title'] == 'A Paper'
+        assert row['abstract'] == "A duplicate paper's abstract"
+        assert row['url'] == "http://mikethicke.com"
+        assert row['doi'] == '10.1038/nature16193'
 
         with pytest.raises(MySQLdb.OperationalError):   # misspelled column name
             paper_table.insert_row(paper_rows[4])

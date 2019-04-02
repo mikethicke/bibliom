@@ -44,7 +44,6 @@ Available formats:
 import os
 import sys
 import argparse
-from textwrap import dedent
 import logging
 
 from bibliom import exceptions
@@ -58,17 +57,18 @@ def parse_args():
     Parses command line arguments using argparse and returns parser object
     with parsed arguments.
     """
+    epilog_string = "Available formats:\n"
+    for parser_class in parsers.Parser.parser_classes():
+        epilog_string += "     {:5}: {}\n".format(
+            parser_class.format_arg(),
+            parser_class.description()
+        )
+
     parser = argparse.ArgumentParser(
         formatter_class=argparse.RawDescriptionHelpFormatter,
         description="Script for importing bibliographic records into an SQL database.",
-        epilog=dedent(
-            """
-            Available formats:
-                WOK         : Web of Science / Web of Knowledge
-                WOKCH       : Web of Science / Web of Knowldge citation history
-                CR          : Crossref
-            """
-        ))
+        epilog=epilog_string
+    )
 
     parser.add_argument(
         "target",
@@ -164,16 +164,18 @@ def get_parser(options):
     """
     Gets instance of parser.
     """
-    parser_class = None
+    parser = None
     if options['format']:
-        parser_class = parsers.Parser.get_parser_from_format_arg(options['format'])
+        parser = parsers.Parser.get_parser_from_format_arg(options['format'])
     elif os.path.isfile(options['target']):
-        parser_class = parsers.Parser.get_parser_for_file(options['target'])
+        parser = parsers.Parser.get_parser_for_file(options['target'])
     elif os.path.isdir(options['target']):
-        parser_class = parsers.Parser.get_parser_for_directory(options['target'])
-    if not parser_class:
+        parser = parsers.Parser.get_parser_for_directory(options['target'])
+    if not parser:
+        logging.getLogger(__name__).error("Could not find parser for target.")
         raise SystemExit
-    return parser_class()
+    logging.getLogger(__name__).verbose_info("Parsing with %s" % str(parser))
+    return parser
 
 def main():
     """
@@ -186,12 +188,16 @@ def main():
             level = logging.VERBOSE_INFO  #pylint: disable=no-member
         else:
             level = logging.INFO
-        logging.basicConfig(
-            stream=sys.stdout,
-            format="%(asctime)s - %(message)s",
-            datefmt="%H:%M:%S",
-            level=level
+        handler = logging.StreamHandler(
+            stream=sys.stdout
         )
+        handler.setLevel(level)
+        formatter = logging.Formatter(
+            fmt="%(asctime)s - %(message)s",
+            datefmt="%H:%M:%S"
+        )
+        handler.setFormatter(formatter)
+        logging.getLogger('bibliom').addHandler(handler)
 
     if options['clear']:
         answer = input(
@@ -222,7 +228,7 @@ def main():
             raise SystemExit
 
     if options['clear']:
-        logging.getLogger(__name__).info('Reseting database.')
+        logging.getLogger(__name__).info('Resetting database.')
         manager.reset_database()
 
     the_parser = get_parser(options)
