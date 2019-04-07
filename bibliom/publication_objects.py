@@ -47,7 +47,7 @@ class Paper(DBEntity):
         if self.idjournal is None:
             return None
         journal_table = DBTable.get_table_object(self.db_table.manager, 'journal')
-        journal = Journal.fetch_entity(journal_table, {'idjournal': self.idjournal})
+        journal = Journal.fetch(journal_table, {'idjournal': self.idjournal})
         return journal
 
     @property
@@ -59,7 +59,7 @@ class Paper(DBEntity):
             return []
         citation_table = DBTable.get_table_object(self.db_table.manager, 'citation')
         citations = Citation.fetch_entities(citation_table, {'source_id':self.idpaper})
-        cited_papers = [Paper.fetch_entity(self.db_table, {'idpaper':c.target_id})
+        cited_papers = [Paper.fetch(self.db_table, {'idpaper':c.target_id})
                         for c in citations]
         return cited_papers
 
@@ -72,7 +72,7 @@ class Paper(DBEntity):
             return []
         citation_table = DBTable.get_table_object(self.db_table.manager, 'citation')
         citations = Citation.fetch_entities(citation_table, {'target_id':self.idpaper})
-        citing_papers = [Paper.fetch_entity(self.db_table, {'idpaper':c.source_id})
+        citing_papers = [Paper.fetch(self.db_table, {'idpaper':c.source_id})
                          for c in citations]
         return citing_papers
 
@@ -201,7 +201,7 @@ class Citation(DBEntity):
         Returns Paper object corresponding to source paper.
         """
         paper_table = DBTable.get_table_object(self.db_table.manager, 'paper')
-        s_paper = Paper.fetch_entity(paper_table, {'idpaper':self.source_id})
+        s_paper = Paper.fetch(paper_table, {'idpaper':self.source_id})
         return s_paper
 
     @source_paper.setter
@@ -217,7 +217,7 @@ class Citation(DBEntity):
         Returns Paper object corresponding to target paper.
         """
         paper_table = DBTable.get_table_object(self.db_table.manager, 'paper')
-        t_paper = Paper.fetch_entity(paper_table, {'idpaper':self.target_id})
+        t_paper = Paper.fetch(paper_table, {'idpaper':self.target_id})
         return t_paper
 
     @target_paper.setter

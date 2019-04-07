@@ -5,6 +5,7 @@ import logging
 import re
 
 import MySQLdb
+from tabulate import tabulate
 
 from bibliom import exceptions
 from bibliom.constants import INFO_THRESHOLD, REPORT_FREQUENCY
@@ -40,8 +41,8 @@ class DBTable:
             "{:12}: {}\n".format("Cached Rows", len(self.rows)) +
             "Fields:\n"
         )
-        field_length = len(max(self.table_structure().keys(), key=len))
-        for field, attributes in self.table_structure().items():
+        field_length = len(max(self.table_structure.keys(), key=len))
+        for field, attributes in self.table_structure.items():
             if attributes['key'] == 'UNI':
                 key_str = 'Unique'
             elif attributes['key'] == 'PRI':
@@ -123,28 +124,37 @@ class DBTable:
             table.sync_to_db()
         logging.getLogger(__name__).debug("Successfully synced tables to database.")
 
+    @property
     def table_structure(self):
         """
         Returns structure of table as dictionary of fields.
         """
         return self.manager.table_structure(self.table_name)
-    
+
     @property
     def row_count(self):
+        """
+        Number of rows in database table.
+        """
         return self.manager.table_row_count(self.table_name)
 
-    def fetch_rows(self, where_dict=None, limit=0, overwrite=True):
+    def fetch_rows(self, where_dict=None, limit=0, order_by=None, overwrite=True, **kwargs):
         """
         Fetch rows from database, add to self.rows, and return.
 
         Args:
-            where_dict (dict): Dictionary of column-value pairs
-                               @see DBManager._build_where
+            where_dict (dict): Dictionary of column-value pairs. Value can be
+                               "IS NULL", "IS NOT NULL", or a list of values.
+                               For comparison operators (>, <, >=, <=, !=) there
+                               must be a space between operator and value.
             limit (int):       Max number of rows to retrieve
+            order_by (str/list/dict): Table field(s) to order by
             overwrite (bool):  If true, replace existing rows when primary key
                                matches. Otherwise, skip matching rows.
+            **kwargs:          Each additional keyword argument adds filter to
+                               column following rules for where_dict.
         """
-        rows = self.manager.fetch_rows(self.table_name, where_dict, limit)
+        rows = self.manager.fetch_rows(self.table_name, where_dict, limit, order_by, **kwargs)
 
         primary_keys = self.manager.primary_key_list(self.table_name)
         rows_dict = {}
@@ -156,6 +166,33 @@ class DBTable:
                 self.row_status[key_str] = DBTable.RowStatus.SYNCED
         return rows_dict
 
+    def print_rows(self, rows, max_width=20):
+        """
+        Print nicely formatted rows.
+        """
+        cleaned_rows = []
+        for row in rows.values():
+            cleaned_row = []
+            for col in row.values():
+                col = str(col)
+                if len(col) > max_width:
+                    cleaned_row.append(col[:max_width-3] + '..')
+                else:
+                    cleaned_row.append(col)
+            cleaned_rows.append(cleaned_row)
+        print(tabulate(cleaned_rows, headers=self.fields))
+
+    def head(self, num_rows=5, max_width=20:
+        """
+        Print first num_rows rows from database.
+        """
+        auto_increment_field = None
+        for field, data in self.table_structure.items():
+            if data['extra'] == 'auto_increment':
+                auto_increment_field = field
+                break
+        rows = self.fetch_rows(where_dict=None, limit=num_rows, order_by=auto_increment_field)
+        self.print_rows(rows, max_width)
 
     def get_row_by_key(self, row_key):
         """
@@ -227,9 +264,9 @@ class DBTable:
             for key, value in row_dict.items():
                 if not value:
                     pass
-                elif self.table_structure()[key]['key'] == 'PRI':
+                elif self.table_structure[key]['key'] == 'PRI':
                     pkey_dict[key] = value
-                elif self.table_structure()[key]['key'] == 'UNI':
+                elif self.table_structure[key]['key'] == 'UNI':
                     unique_dict_list.append({key:value})
             if pkey_dict:
                 old_row = self.fetch_rows(pkey_dict)
@@ -246,8 +283,7 @@ class DBTable:
                 raise exceptions.DBIntegrityError(
                     ('One row expected, but %d returned when fetching duplicate row.\n' % 
                         len(old_row)) +
-                    ('Row: %s\n' % str(old_row)) +
-                    ('Row dict: %s' % str(row_dict_copy))
+                    ('Row: %s\n' % str(old_row))
                 )
             duplicate_key = list(old_row.keys())[0]
                 

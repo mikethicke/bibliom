@@ -46,7 +46,7 @@ class TestPaper():
     def test_str(self):
         logging.getLogger('bibliom.pytest').debug('-->TestPaper.test_str')
         paper_table = DBTable.get_table_object(self.manager, 'paper')
-        paper = Paper.fetch_entity(
+        paper = Paper.fetch(
             db_table=paper_table,
             where_dict={'doi': '10.1089/ars.2017.7361'}
         )
@@ -57,7 +57,7 @@ class TestPaper():
     def test_authors(self):
         logging.getLogger('bibliom.pytest').debug('-->TestPaper.test_authors')
         paper_table = DBTable.get_table_object(self.manager, 'paper')
-        paper = Paper.fetch_entity(
+        paper = Paper.fetch(
             db_table=paper_table,
             where_dict={'doi': '10.1089/ars.2017.7361'}
         )
@@ -75,7 +75,7 @@ class TestPaper():
     def test_journal(self):
         logging.getLogger('bibliom.pytest').debug('-->TestPaper.test_journal')
         paper_table = DBTable.get_table_object(self.manager, 'paper')
-        paper = Paper.fetch_entity(
+        paper = Paper.fetch(
             db_table=paper_table,
             where_dict={'doi': '10.1089/ars.2017.7361'}
         )
@@ -84,7 +84,7 @@ class TestPaper():
     def test_cited_papers(self):
         logging.getLogger('bibliom.pytest').debug('-->TestPaper.test_cited_papers')
         paper_table = DBTable.get_table_object(self.manager, 'paper')
-        paper = Paper.fetch_entity(
+        paper = Paper.fetch(
             db_table=paper_table,
             where_dict={'doi': '10.1089/ars.2017.7361'}
         )
@@ -102,7 +102,7 @@ class TestPaper():
     def test_citing_papers(self):
         logging.getLogger('bibliom.pytest').debug('-->TestPaper.test_citing_papers')
         paper_table = DBTable.get_table_object(self.manager, 'paper')
-        paper = Paper.fetch_entity(
+        paper = Paper.fetch(
             db_table=paper_table,
             where_dict={'doi': '10.1016/j.ijhydene.2016.06.178'}
         )
@@ -120,11 +120,11 @@ class TestPaper():
     def test_cite(self):
         logging.getLogger('bibliom.pytest').debug('-->TestPaper.test_cite')
         paper_table = DBTable.get_table_object(self.manager, 'paper')
-        source_paper = Paper.fetch_entity(
+        source_paper = Paper.fetch(
             db_table=paper_table,
             where_dict={'doi': '10.1016/j.ijhydene.2016.06.178'}
         )
-        target_paper = Paper.fetch_entity(
+        target_paper = Paper.fetch(
             db_table=paper_table,
             where_dict={'doi': '10.1016/j.ijhydene.2016.07.026'}
         )
@@ -266,7 +266,7 @@ class TestJournal():
         logging.getLogger('bibliom.pytest').debug('-->TestJournal.test_papers')
         journal_table = DBTable.get_table_object(self.manager, 'journal')
 
-        journal = Journal.fetch_entity(
+        journal = Journal.fetch(
             db_table=journal_table,
             where_dict={
                 'issn':     '1876-6102'
@@ -318,11 +318,11 @@ class TestCitation():
         citation_table = DBTable.get_table_object(self.manager, 'citation')
         paper_table = DBTable.get_table_object(self.manager, 'paper')
 
-        source_paper = Paper.fetch_entity(
+        source_paper = Paper.fetch(
             db_table=paper_table,
             where_dict={'doi': '10.1016/j.ijhydene.2016.06.178'}
         )
-        target_paper = Paper.fetch_entity(
+        target_paper = Paper.fetch(
             db_table=paper_table,
             where_dict={'doi': '10.1016/j.ijhydene.2016.07.026'}
         )

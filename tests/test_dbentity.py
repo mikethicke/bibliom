@@ -126,8 +126,7 @@ class TestDBEntity():
         with pytest.raises(TypeError):
             entities = DBEntity.fetch_entities('author', {'last_name': 'Nothing'})
 
-        with pytest.raises(TypeError):
-            entities = DBEntity.fetch_entities(author_table, [])
+        assert DBEntity.fetch_entities(author_table, []) is None
 
     def test_fetch_entity(self):
         logging.getLogger('bibliom.pytest').debug('-->TestDBEntity.test_fetch_entity')
@@ -139,7 +138,7 @@ class TestDBEntity():
                 'given_names':  str(i+1)
             })
         author_table.insert_many_new_rows()
-        entity = DBEntity.fetch_entity(author_table, {'last_name': 'Numberer'})
+        entity = DBEntity.fetch(author_table, {'last_name': 'Numberer'})
         assert isinstance(entity, DBEntity)
         assert entity.last_name == 'Numberer'
         assert entity.orcid is None
@@ -235,7 +234,7 @@ class TestDBEntity():
         entity.save_to_db()
         del entity
         paper_table.rows = {}
-        new_entity = DBEntity.fetch_entity(paper_table, {'title': 'A Paper'})
+        new_entity = DBEntity.fetch(paper_table, {'title': 'A Paper'})
         assert new_entity.url == "http://mikethicke.com"
         assert new_entity.row_key == 'idpaper' + DBTable.KEY_STR_DELIMITER + '1'
 

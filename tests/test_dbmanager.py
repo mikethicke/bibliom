@@ -345,6 +345,8 @@ class TestDBManager():
         rows = self.manager.fetch_rows(table_name, {'given_names': '%Mich%'})
         assert isinstance(rows, list)
         assert len(rows) == 2
+        rows2 = self.manager.fetch_rows(table_name, given_names='%Mich%')
+        assert rows2 == rows
         for row in rows:
             assert isinstance(row, dict)
         with pytest.raises(MySQLdb.OperationalError): #should this raise a ValueError instead?

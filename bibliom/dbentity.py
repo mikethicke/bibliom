@@ -77,21 +77,45 @@ class DBEntity:
         return entities
 
     @classmethod
-    def fetch_entities(cls, db_table, where_dict):
+    def fetch_entities(cls, db_table, where_dict=None, **kwargs):
         """
         Returns a list of entities from db_table matching where_dict.
+
+        Args:
+            db_table (DBTable): Table object to fetch from.
+            where_dict: dictionary of column-value pairs. Value can be
+                        "IS NULL", "IS NOT NULL", or a list of values.
+                        For comparison operators (>, <, >=, <=, !=) there must
+                        be a space between operator and value.
+            **kwargs: Each additional keyword argument adds filter to column
+                      following rules for where_dict.
         """
         if not isinstance(db_table, DBTable):
             raise TypeError("db_table must be DBTable object")
+        if where_dict is None:
+            where_dict = {}
+        if kwargs:
+            where_dict = {**where_dict, **kwargs}
+        if not where_dict:
+            return None
         rows = db_table.fetch_rows(where_dict)
         return cls.entities_from_table_rows(db_table, rows)
 
     @classmethod
-    def fetch_entity(cls, db_table, where_dict):
+    def fetch(cls, db_table, where_dict=None, **kwargs):
         """
         Returns a single entity from db_table matching where_dict.
+
+        args:
+            db_table (DBTable): Table to fetch from
+            where_dict: dictionary of column-value pairs. Value can be
+                        "IS NULL", "IS NOT NULL", or a list of values.
+                        For comparison operators (>, <, >=, <=, !=) there must
+                        be a space between operator and value.
+            **kwargs: Each additional keyword argument adds filter to column
+                      following rules for where_dict.
         """
-        entity_list = cls.fetch_entities(db_table, where_dict)
+        entity_list = cls.fetch_entities(db_table, where_dict, **kwargs)
         if entity_list:
             return entity_list[0]
         return None

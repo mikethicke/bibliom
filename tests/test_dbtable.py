@@ -94,8 +94,8 @@ class TestDBTable:
     def test_table_structure(self):
         logging.getLogger('bibliom.pytest').debug('-->TestDBTable.test_table_structure')
         table = DBTable.get_table_object(self.manager, 'paper')
-        assert isinstance(table.table_structure(), dict)
-        assert table.table_structure()
+        assert isinstance(table.table_structure, dict)
+        assert table.table_structure
 
     def test_get_table_object(self):
         logging.getLogger('bibliom.pytest').debug('-->TestDBTable.test_get_table_object')
@@ -444,3 +444,14 @@ class TestDBTable:
             assert author_table.row_status[row_key] == author_table.RowStatus.SYNCED
         for row_key, row_value in paper_table.rows.items():
             assert paper_table.row_status[row_key] == paper_table.RowStatus.SYNCED
+
+@pytest.mark.usefixtures('import_small_database')
+@pytest.mark.usefixtures('class_manager')  
+class TestDBTableExistingDB:
+    """Tests for DBTable that use test database"""
+    def test_head(self):
+        logging.getLogger('bibliom.pytest').debug('-->TestDBTable.test_head')
+        paper_table = DBTable.get_table_object(self.manager, 'paper')
+        paper_table.head()
+
+

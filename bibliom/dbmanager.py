@@ -28,7 +28,7 @@ class DBManager:
         self.use_unicode = use_unicode
         self.db = None
 
-        self._connect()
+        self.connect()
 
         self.dbtables = {}
 
@@ -56,47 +56,6 @@ class DBManager:
             rep_string += "{:15}: {}".format("Tables", table_names)
         return rep_string
 
-    def _connect(self):
-        """
-        Connect to the database.
-        """
-        if (self.user is not None
-                and self.password is not None
-                and self.name is not None):
-            logging.getLogger(__name__).debug(
-                "Connecting to database %s as %s", self.name, self.user)
-            try:
-                self.db = MySQLdb.connect("localhost",
-                                          self.user,
-                                          self.password,
-                                          self.name,
-                                          charset=self.charset,
-                                          use_unicode=self.use_unicode,
-                                          connect_timeout=5)
-            except MySQLdb.Error as e:
-                logging.getLogger(__name__).exception("Failed to connect to database.")
-                #Unknown database
-                if e.args[0] == 1049:
-                    raise exceptions.UnknownDatabaseError("Database %s not found" % self.name)
-                else:
-                    raise
-            else:
-                logging.getLogger(__name__).debug("Successfully connected to database.")
-
-    def close(self):
-        """
-        Close database connection.
-        """
-        logging.getLogger(__name__).debug("Closing database connection to %s", self.name)
-        if self.db is not None:
-            try:
-                self.db.close()
-                self.db = None
-            except (MySQLdb.Error, MySQLdb.Warning):
-                logging.getLogger(__name__).exception("Failed to close database connection.")
-            else:
-                logging.getLogger(__name__).debug("Closed database connection.")
-
     def _run_sql(self, sql_statements, ignore_exceptions=False):
         """
         Run a list of SQL statements.
@@ -111,11 +70,18 @@ class DBManager:
             cursor = self.db.cursor()
             for statement in sql_statements:
                 if statement:
-                    try:
-                        cursor.execute(statement)
-                    except MySQLdb.Error:
-                        if not ignore_exceptions:
-                            raise
+                    retries = 0
+                    while True:
+                        try:
+                            cursor.execute(statement)
+                            break
+                        except MySQLdb.Error:
+                            self.db.rollback()
+                            if retries < MAX_DB_RETRIES:
+                                retries += 1
+                                continue
+                            if not ignore_exceptions:
+                                raise
             return True
         return False
 
@@ -150,7 +116,7 @@ class DBManager:
             (where_clause (str), value_list)
         """
         value_list = []
-        if where_dict is None:
+        if not where_dict:
             return ("1", [])
 
         if not isinstance(where_dict, dict):
@@ -255,6 +221,60 @@ class DBManager:
                     'where_or_clause'    : where_or_clause}
         return None
 
+    def connect(self):
+        """
+        Connect to the database.
+        """
+        if (self.user is not None
+                and self.password is not None
+                and self.name is not None):
+            logging.getLogger(__name__).debug(
+                "Connecting to database %s as %s", self.name, self.user)
+            retries = 0
+            while True:
+                try:
+                    self.db = MySQLdb.connect("localhost",
+                                            self.user,
+                                            self.password,
+                                            self.name,
+                                            charset=self.charset,
+                                            use_unicode=self.use_unicode,
+                                            connect_timeout=5)
+                    break;
+                except MySQLdb.Error as e:
+                    if retries < MAX_DB_RETRIES:
+                        retries += 1
+                        continue
+                    #Unknown database
+                    if e.args[0] == 1049:
+                        raise exceptions.UnknownDatabaseError("Database %s not found" % self.name)
+                    else:
+                        logging.getLogger(__name__).debug("Failed to connect to database.")
+                        raise
+                else:
+                    logging.getLogger(__name__).debug("Successfully connected to database.")
+                    return
+
+    def close(self):
+        """
+        Close database connection.
+        """
+        logging.getLogger(__name__).debug("Closing database connection to %s", self.name)
+        if self.db is not None:
+            retries = 0
+            while True:
+                try:
+                    self.db.close()
+                    self.db = None
+                    break;
+                except (MySQLdb.Error, MySQLdb.Warning):
+                    if retries < MAX_DB_RETRIES:
+                        retries += 1
+                        continue
+                    logging.getLogger(__name__).exception("Failed to close database connection.")
+                else:
+                    logging.getLogger(__name__).debug("Closed database connection.")
+
     def create_database(self, name=None, sql_source_file=None):
         """
         Creates a new database and connects to it.
@@ -316,7 +336,7 @@ class DBManager:
             logging.getLogger(__name__).exception(
                 "Error attempting to use database with name %s", name)
             raise
-        
+
         try:
             for command in sql_commands:
                 if command:
@@ -328,13 +348,16 @@ class DBManager:
 
         if not created_tables:
             query = "DROP DATABASE %s" % name
-            cursor.execute(query)
-            temp_db.close()
+            try:
+                cursor.execute(query)
+                temp_db.close()
+            except MySQLdb.Error:
+                pass
             raise exceptions.FailedDatabaseCreationError("Failed to create database tables.")
 
         temp_db.close()
         self.name = name
-        self._connect()
+        self.connect()
         logging.getLogger(__name__).debug("Successfully created database %s and tables.", name)
 
     def drop_database(self):
@@ -355,6 +378,7 @@ class DBManager:
                 return
             except MySQLdb.Error:
                 if retries < MAX_DB_RETRIES:
+                    retries += 1
                     continue
                 logging.getLogger(__name__).exception("Error dropping database %s", self.name)
                 raise
@@ -400,27 +424,27 @@ class DBManager:
         Returns:
             dictionary of dictionaries where outer dictionary is keyed on
             field name, and inner dictionary on attribute names
-
-        {
-            'doi': {'type': 'varchar(150)', 'null': 'YES', 'key': 'UNI', 'default': None, 'extra': ''},
-            'title': {'type': 'varchar(1000)', 'null': 'YES', 'key': '', 'default': None, 'extra': ''},
-            'publication_date': {'type': 'date', 'null': 'YES', 'key': '', 'default': None, 'extra': ''},
-            'abstract': {'type': 'text', 'null': 'YES', 'key': '', 'default': None, 'extra': ''},
-            'open_access': {'type': 'tinyint(1)', 'null': 'YES', 'key': '', 'default': None, 'extra': ''},
-            'url': {'type': 'varchar(2083)', 'null': 'YES', 'key': '', 'default': None, 'extra': ''},
-            'idjournal': {'type': 'int(11)', 'null': 'YES', 'key': 'MUL', 'default': None, 'extra': ''},
-            'idpaper': {'type': 'int(11)', 'null': 'NO', 'key': 'PRI', 'default': None, 'extra': 'auto_increment'},
-            'first_page': {'type': 'varchar(10)', 'null': 'YES', 'key': '', 'default': None, 'extra': ''},
-            'last_page': {'type': 'varchar(10)', 'null': 'YES', 'key': '', 'default': None, 'extra': ''},
-            'time_added': {'type': 'datetime', 'null': 'YES', 'key': '', 'default': None, 'extra': ''},
-            'content': {'type': 'longtext', 'null': 'YES', 'key': '', 'default': None, 'extra': ''},
-            'cited_records': {'type': 'longtext', 'null': 'YES', 'key': '', 'default': None, 'extra': ''},
-            'wos_identifier': {'type': 'varchar(150)', 'null': 'YES', 'key': 'UNI', 'default': None, 'extra': ''},
-            'total_citations': {'type': 'int(11)', 'null': 'YES', 'key': '', 'default': None, 'extra': ''},
-            'citation_record': {'type': 'longtext', 'null': 'YES', 'key': '', 'default': None, 'extra': ''},
-            'retracted_year': {'type': 'year(4)', 'null': 'YES', 'key': '', 'default': None, 'extra': ''}
-        }
         """
+        # Typical return value:
+        # {
+        #     'doi': {'type': 'varchar(150)', 'null': 'YES', 'key': 'UNI', 'default': None, 'extra': ''},
+        #     'title': {'type': 'varchar(1000)', 'null': 'YES', 'key': '', 'default': None, 'extra': ''},
+        #     'publication_date': {'type': 'date', 'null': 'YES', 'key': '', 'default': None, 'extra': ''},
+        #     'abstract': {'type': 'text', 'null': 'YES', 'key': '', 'default': None, 'extra': ''},
+        #     'open_access': {'type': 'tinyint(1)', 'null': 'YES', 'key': '', 'default': None, 'extra': ''},
+        #     'url': {'type': 'varchar(2083)', 'null': 'YES', 'key': '', 'default': None, 'extra': ''},
+        #     'idjournal': {'type': 'int(11)', 'null': 'YES', 'key': 'MUL', 'default': None, 'extra': ''},
+        #     'idpaper': {'type': 'int(11)', 'null': 'NO', 'key': 'PRI', 'default': None, 'extra': 'auto_increment'},
+        #     'first_page': {'type': 'varchar(10)', 'null': 'YES', 'key': '', 'default': None, 'extra': ''},
+        #     'last_page': {'type': 'varchar(10)', 'null': 'YES', 'key': '', 'default': None, 'extra': ''},
+        #     'time_added': {'type': 'datetime', 'null': 'YES', 'key': '', 'default': None, 'extra': ''},
+        #     'content': {'type': 'longtext', 'null': 'YES', 'key': '', 'default': None, 'extra': ''},
+        #     'cited_records': {'type': 'longtext', 'null': 'YES', 'key': '', 'default': None, 'extra': ''},
+        #     'wos_identifier': {'type': 'varchar(150)', 'null': 'YES', 'key': 'UNI', 'default': None, 'extra': ''},
+        #     'total_citations': {'type': 'int(11)', 'null': 'YES', 'key': '', 'default': None, 'extra': ''},
+        #     'citation_record': {'type': 'longtext', 'null': 'YES', 'key': '', 'default': None, 'extra': ''},
+        #     'retracted_year': {'type': 'year(4)', 'null': 'YES', 'key': '', 'default': None, 'extra': ''}
+        # }
         if self.db is not None:
             query = "DESCRIBE %s;" % (str(table_name, ))
             try:
@@ -511,36 +535,73 @@ class DBManager:
         """
         return list(self.dbtables.keys())
 
-    def fetch_row(self, table_name, where_dict):
+    def fetch_row(self, table_name, where_dict, **kwargs):
         """
         Fetches a row from table_name matching where_dict
-        """
-        (where_clause, value_list) = DBManager._build_where(where_dict)
-        query = "SELECT * FROM %s WHERE %s" % (table_name, where_clause)
-        cursor = self.db.cursor(MySQLdb.cursors.DictCursor)
-        try:
-            cursor.execute(query, value_list)
-        except MySQLdb.Error as e:
-            logging.getLogger(__name__).exception(
-                "Failed to fetch row. Query: %s Error: %s", query, e)
-            raise
-        result = cursor.fetchone()
-        return result
 
-    def fetch_rows(self, table_name, where_dict=None, limit=0):
+        Args:
+            table_name (str): Table to fetch from
+            where_dict: Dictionary of column-value pairs. Value can be
+                        "IS NULL", "IS NOT NULL", or a list of values.
+                        For comparison operators (>, <, >=, <=, !=) there must
+                        be a space between operator and value.
+            **kwargs: Each additional keyword argument adds filter to column
+                      following rules for where_dict.
+        """
+        result = self.fetch_rows(table_name, where_dict, limit=1, **kwargs)
+        if result:
+            return result[0]
+        else:
+            return None
+
+    def fetch_rows(self, table_name, where_dict=None, limit=0, order_by=None, **kwargs):
         """
         Fetches rows from table_name.
 
         Args:
-            table_name (str): Name of table to fetch from.
-            where_dict (dict): Dictionary of column:value pairs
-            limit (int): Max rows to return, or 0 for unlimited
+            table_name (str):  Name of table to fetch from.
+            where_dict (dict): Dictionary of column-value pairs. Value can be
+                               "IS NULL", "IS NOT NULL", or a list of values.
+                               For comparison operators (>, <, >=, <=, !=) there
+                               must be a space between operator and value.
+            limit (int):       Max rows to return, or 0 for unlimited
+            order_by (str):    Field to order by (ascending)
+            order_by (list):   Fields to order by (ascending, in list order)
+            order_by (dict):   Fields to order by, where keys are fields and
+                               values are 'ASC' or 'DESC'
+            **kwargs:          Each additional keyword argument adds filter to
+                               column following rules for where_dict.
 
         Returns:
             List of dictionaries of column-value, or None.
         """
+        if where_dict is None:
+            where_dict = {}
+        if kwargs:
+            where_dict = {**where_dict, **kwargs}
         (where_clause, value_list) = DBManager._build_where(where_dict)
         query = "SELECT * FROM %s WHERE %s" % (table_name, where_clause)
+        if order_by:
+            if isinstance(order_by, str):
+                query += " ORDER BY %s" % order_by
+            elif isinstance(order_by, list):
+                query += " ORDER BY "
+                field_str = ''
+                for field in order_by:
+                    if field_str:
+                        field_str += ', '
+                    field_str += field
+                query += field_str
+            elif isinstance(order_by, dict):
+                query += " ORDER BY "
+                field_str = ''
+                for field, order in order_by:
+                    if field_str:
+                        field_str += ', '
+                    field_str += "%s %s" % (field, order)
+                query += field_str
+            else:
+                raise TypeError("order_by must be str, list, dict, or None")
         if limit:
             query += " LIMIT %s" % limit
         cursor = self.db.cursor(MySQLdb.cursors.DictCursor)
