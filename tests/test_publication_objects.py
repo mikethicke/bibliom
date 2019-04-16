@@ -19,17 +19,17 @@ class TestPaper():
     """
     def test_init(self):
         logging.getLogger('bibliom.pytest').debug('-->TestPaper.test_init')
-        new_paper = Paper(db_manager=self.manager)
+        new_paper = Paper(manager=self.manager)
         assert isinstance(new_paper, Paper)
         assert not new_paper.was_retracted
 
         paper_table = DBTable.get_table_object(self.manager, 'paper')
-        new_paper = Paper(db_table=paper_table)
+        new_paper = Paper(table=paper_table)
         assert isinstance(new_paper, Paper)
         assert not new_paper.was_retracted
 
         new_paper = Paper(
-            db_table=paper_table,
+            table=paper_table,
             fields_dict={
                 'title':    "A New Paper",
                 'doi':      "10.1231/12312"
@@ -38,7 +38,7 @@ class TestPaper():
         assert new_paper.doi == "10.1231/12312"
 
         paper = Paper(
-            db_table=paper_table,
+            table=paper_table,
             row_key='idpaper' + DBTable.KEY_STR_DELIMITER + '1'
         )
         assert paper.title
@@ -47,7 +47,7 @@ class TestPaper():
         logging.getLogger('bibliom.pytest').debug('-->TestPaper.test_str')
         paper_table = DBTable.get_table_object(self.manager, 'paper')
         paper = Paper.fetch(
-            db_table=paper_table,
+            table=paper_table,
             where_dict={'doi': '10.1089/ars.2017.7361'}
         )
         assert str(paper) == (
@@ -58,13 +58,13 @@ class TestPaper():
         logging.getLogger('bibliom.pytest').debug('-->TestPaper.test_authors')
         paper_table = DBTable.get_table_object(self.manager, 'paper')
         paper = Paper.fetch(
-            db_table=paper_table,
+            table=paper_table,
             where_dict={'doi': '10.1089/ars.2017.7361'}
         )
         assert len(paper.authors) == 2
 
         new_paper = Paper(
-            db_table=paper_table,
+            table=paper_table,
             fields_dict={
                 'title':    "A New Paper",
                 'doi':      "10.1231/12312"
@@ -76,7 +76,7 @@ class TestPaper():
         logging.getLogger('bibliom.pytest').debug('-->TestPaper.test_journal')
         paper_table = DBTable.get_table_object(self.manager, 'paper')
         paper = Paper.fetch(
-            db_table=paper_table,
+            table=paper_table,
             where_dict={'doi': '10.1089/ars.2017.7361'}
         )
         assert paper.journal.title == 'ANTIOXIDANTS & REDOX SIGNALING'
@@ -85,13 +85,13 @@ class TestPaper():
         logging.getLogger('bibliom.pytest').debug('-->TestPaper.test_cited_papers')
         paper_table = DBTable.get_table_object(self.manager, 'paper')
         paper = Paper.fetch(
-            db_table=paper_table,
+            table=paper_table,
             where_dict={'doi': '10.1089/ars.2017.7361'}
         )
         assert len(paper.cited_papers) == 177
 
         new_paper = Paper(
-            db_table=paper_table,
+            table=paper_table,
             fields_dict={
                 'title':    "A New Paper",
                 'doi':      "10.1231/12312"
@@ -103,13 +103,13 @@ class TestPaper():
         logging.getLogger('bibliom.pytest').debug('-->TestPaper.test_citing_papers')
         paper_table = DBTable.get_table_object(self.manager, 'paper')
         paper = Paper.fetch(
-            db_table=paper_table,
+            table=paper_table,
             where_dict={'doi': '10.1016/j.ijhydene.2016.06.178'}
         )
         assert len(paper.citing_papers) == 5
 
         new_paper = Paper(
-            db_table=paper_table,
+            table=paper_table,
             fields_dict={
                 'title':    "A New Paper",
                 'doi':      "10.1231/12312"
@@ -121,11 +121,11 @@ class TestPaper():
         logging.getLogger('bibliom.pytest').debug('-->TestPaper.test_cite')
         paper_table = DBTable.get_table_object(self.manager, 'paper')
         source_paper = Paper.fetch(
-            db_table=paper_table,
+            table=paper_table,
             where_dict={'doi': '10.1016/j.ijhydene.2016.06.178'}
         )
         target_paper = Paper.fetch(
-            db_table=paper_table,
+            table=paper_table,
             where_dict={'doi': '10.1016/j.ijhydene.2016.07.026'}
         )
         new_citation = source_paper.cite(target_paper)
@@ -165,17 +165,17 @@ class TestAuthor():
         author_table = DBTable.get_table_object(self.manager, 'author')
 
         new_author = Author(
-            db_manager=self.manager
+            manager=self.manager
         )
         assert isinstance(new_author, Author)
 
         new_author = Author(
-            db_table=author_table
+            table=author_table
         )
         assert isinstance(new_author, Author)
 
         new_author = Author(
-            db_table=author_table,
+            table=author_table,
             fields_dict={
                 'last_name':    'Thicke',
                 'given_names':  'Mike'
@@ -185,7 +185,7 @@ class TestAuthor():
         assert new_author.last_name == 'Thicke'
 
         new_author = Author(
-            db_table=author_table,
+            table=author_table,
             row_key='idauthor' + DBTable.KEY_STR_DELIMITER + '1'
         )
         assert isinstance(new_author, Author)
@@ -194,7 +194,7 @@ class TestAuthor():
     def test_str(self):
         logging.getLogger('bibliom.pytest').debug('-->TestAuthor.test_str')
         new_author = Author(
-            db_manager=self.manager,
+            manager=self.manager,
             fields_dict={
                 'last_name':    'Thicke',
                 'given_names':  'Michael Lowell Ellis'
@@ -218,13 +218,13 @@ class TestAuthor():
         author_table = DBTable.get_table_object(self.manager, 'author')
 
         author = Author(
-            db_table=author_table,
+            table=author_table,
             row_key='idauthor' + author_table.KEY_STR_DELIMITER + '1'
         )
         assert len(author.papers) == 1
 
         new_author = Author(
-            db_manager=self.manager,
+            manager=self.manager,
             fields_dict={
                 'last_name':    'Thicke',
                 'given_names':  'Michael Lowell Ellis'
@@ -242,20 +242,20 @@ class TestJournal():
         logging.getLogger('bibliom.pytest').debug('-->TestJournal.test_init')
         journal_table = DBTable.get_table_object(self.manager, 'journal')
 
-        journal = Journal(db_manager=self.manager)
+        journal = Journal(manager=self.manager)
         assert isinstance(journal, Journal)
 
-        journal = Journal(db_table=journal_table)
+        journal = Journal(table=journal_table)
         assert isinstance(journal, Journal)
 
         journal = Journal(
-            db_table=journal_table,
+            table=journal_table,
             row_key='idjournal' + journal_table.KEY_STR_DELIMITER + '1')
         assert isinstance(journal, Journal)
         assert isinstance(journal.title, str)
 
         new_journal = Journal(
-            db_table=journal_table,
+            table=journal_table,
             fields_dict={
                 'title':    'A Journal'
             }
@@ -267,7 +267,7 @@ class TestJournal():
         journal_table = DBTable.get_table_object(self.manager, 'journal')
 
         journal = Journal.fetch(
-            db_table=journal_table,
+            table=journal_table,
             where_dict={
                 'issn':     '1876-6102'
             }
@@ -284,14 +284,14 @@ class TestCitation():
         logging.getLogger('bibliom.pytest').debug('-->TestCitation.test_init')
         citation_table = DBTable.get_table_object(self.manager, 'citation')
 
-        citation = Citation(db_table=citation_table)
+        citation = Citation(table=citation_table)
         assert isinstance(citation, Citation)
 
-        citation = Citation(db_manager=self.manager)
+        citation = Citation(manager=self.manager)
         assert isinstance(citation, Citation)
 
         citation = Citation(
-            db_table=citation_table,
+            table=citation_table,
             row_key=('source_id' +
                      citation_table.KEY_STR_DELIMITER +
                      'target_id' +
@@ -303,7 +303,7 @@ class TestCitation():
         assert isinstance(citation, Citation)
 
         new_citation = Citation(
-            db_table=citation_table,
+            table=citation_table,
             fields_dict={
                 'source_id':    100,
                 'target_id':    200
@@ -319,15 +319,15 @@ class TestCitation():
         paper_table = DBTable.get_table_object(self.manager, 'paper')
 
         source_paper = Paper.fetch(
-            db_table=paper_table,
+            table=paper_table,
             where_dict={'doi': '10.1016/j.ijhydene.2016.06.178'}
         )
         target_paper = Paper.fetch(
-            db_table=paper_table,
+            table=paper_table,
             where_dict={'doi': '10.1016/j.ijhydene.2016.07.026'}
         )
 
-        new_citation = Citation(db_table=citation_table)
+        new_citation = Citation(table=citation_table)
         new_citation.cite(source_paper, target_paper)
         assert new_citation.source_id == source_paper.idpaper
         assert new_citation.target_id == target_paper.idpaper
@@ -338,7 +338,7 @@ class TestCitation():
         paper_table = DBTable.get_table_object(self.manager, 'paper')
 
         citation = Citation(
-            db_table=citation_table,
+            table=citation_table,
             row_key=('source_id' +
                      citation_table.KEY_STR_DELIMITER +
                      'target_id' +
@@ -355,14 +355,14 @@ class TestCitation():
         assert target_paper.doi == '10.1088/1674-1137/41/11/113104'
 
         paper_1 = Paper(
-            db_table=paper_table,
+            table=paper_table,
             row_key='idpaper' + DBTable.KEY_STR_DELIMITER + '1'
         )
         paper_2 = Paper(
-            db_table=paper_table,
+            table=paper_table,
             row_key='idpaper' + DBTable.KEY_STR_DELIMITER + '2'
         )
-        citation = Citation(db_table=citation_table)
+        citation = Citation(table=citation_table)
         citation.source_paper = paper_1
         citation.target_paper = paper_2
         assert citation.source_id == 1

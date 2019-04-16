@@ -2,7 +2,6 @@
 DBTable class.
 """
 import logging
-import re
 
 import MySQLdb
 from tabulate import tabulate
@@ -182,7 +181,7 @@ class DBTable:
             cleaned_rows.append(cleaned_row)
         print(tabulate(cleaned_rows, headers=self.fields))
 
-    def head(self, num_rows=5, max_width=20:
+    def head(self, num_rows=5, max_width=20):
         """
         Print first num_rows rows from database.
         """
@@ -249,9 +248,6 @@ class DBTable:
             duplicate_entry = False
         except MySQLdb.IntegrityError as e:
             if e.args[0] == 1062: #Duplicate entry
-                m = re.match('Duplicate entry \'(.*)\' for key', e.args[1])
-                if m is not None:
-                    duplicate_value = m.group(1)
                 duplicate_entry = True
             else:
                 raise
@@ -313,7 +309,7 @@ class DBTable:
                 return duplicate_key
             else:
                 raise AttributeError("Parameter 'duplicates' has unknown value.")
-        else:
+        else: #No duplicate entry
             pkl = self.manager.primary_key_list(self.table_name)
             if new_pri_key > 0 and len(pkl) == 1:
                 # Row inserted successfully and primary key returned

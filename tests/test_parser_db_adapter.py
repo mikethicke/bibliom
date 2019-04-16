@@ -30,7 +30,7 @@ class TestParserDBAdapter():
             duplicates=DBTable.Duplicates.INSERT
         )
         papers = publication_objects.Paper.fetch_entities(
-            db_table=DBTable.get_table_object(self.manager, 'paper'),
+            table=DBTable.get_table_object(self.manager, 'paper'),
             where_dict={'title': 'NOT NULL'}
         )
         assert len(papers) == 500
@@ -46,7 +46,7 @@ class TestParserDBAdapter():
             self.manager
         )
         papers = publication_objects.Paper.fetch_entities(
-            db_table=DBTable.get_table_object(self.manager, 'paper'),
+            table=DBTable.get_table_object(self.manager, 'paper'),
             where_dict={'title': 'NOT NULL', 'citation_history': 'NOT NULL'}
         )
         assert len(papers) == 500

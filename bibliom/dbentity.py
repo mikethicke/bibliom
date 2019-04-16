@@ -12,27 +12,27 @@ class DBEntity:
     object.
     """
     def __init__(self,
-                 db_table,
+                 table,
                  row_key=0,
                  fields_dict=None):
-        self.__dict__['db_table'] = db_table
+        self.__dict__['table'] = table
 
         if row_key:
             self.row_key = row_key
-            self.db_table.get_row_by_key(row_key)
+            self.table.get_row_by_key(row_key)
         else:
-            self.row_key = self.db_table.create_new_row(fields_dict)
+            self.row_key = self.table.create_new_row(fields_dict)
 
-        if self.row_key not in db_table.entites.keys():
-            db_table.entites[row_key] = self
+        if self.row_key not in table.entites.keys():
+            table.entites[row_key] = self
 
     def __getattr__(self, attr_name):
-        if attr_name in self.db_table.fields:
+        if attr_name in self.table.fields:
             return self.get_field(attr_name)
         raise exceptions.BiblioException(attr_name + ' not in DBTable.fields.')
 
     def __setattr__(self, attr_name, value):
-        if attr_name in self.db_table.fields:
+        if attr_name in self.table.fields:
             self.set_field(attr_name, value)
         else:
             object.__setattr__(self, attr_name, value)
@@ -50,10 +50,8 @@ class DBEntity:
         rep_string = ""
         max_key_length = len(max(self.fields_dict.keys(), key=len))
         max_key_length = max(max_key_length, len("Table"))
-        class_name = type(self).__name__
-        rep_string += "<<%s instance>>\n" % class_name
         rep_string += "{:{max_key_length}}: {}\n".format(
-            "Table: ", self.db_table.table_name, max_key_length=max_key_length)
+            "Table: ", self.table.table_name, max_key_length=max_key_length)
         for key, value in self.fields_dict.items():
             if value:
                 value = str(value)
@@ -65,24 +63,24 @@ class DBEntity:
         return rep_string
 
     @classmethod
-    def entities_from_table_rows(cls, db_table, rows):
+    def entities_from_table_rows(cls, table, rows):
         """
-        Returns a list of entities from db_table corresponding to rows.
+        Returns a list of entities from table corresponding to rows.
         """
         if not isinstance(rows, dict):
             raise TypeError('rows must be dictionary of table rows indexed by row_key')
-        if not isinstance(db_table, DBTable):
-            raise TypeError('db_table must be DBTable object')
-        entities = [cls(db_table=db_table, row_key=key) for key in rows.keys()]
+        if not isinstance(table, DBTable):
+            raise TypeError('table must be DBTable object')
+        entities = [cls(table=table, row_key=key) for key in rows.keys()]
         return entities
 
     @classmethod
-    def fetch_entities(cls, db_table, where_dict=None, **kwargs):
+    def fetch_entities(cls, table, where_dict=None, **kwargs):
         """
-        Returns a list of entities from db_table matching where_dict.
+        Returns a list of entities from table matching where_dict.
 
         Args:
-            db_table (DBTable): Table object to fetch from.
+            table (DBTable): Table object to fetch from.
             where_dict: dictionary of column-value pairs. Value can be
                         "IS NULL", "IS NOT NULL", or a list of values.
                         For comparison operators (>, <, >=, <=, !=) there must
@@ -90,24 +88,24 @@ class DBEntity:
             **kwargs: Each additional keyword argument adds filter to column
                       following rules for where_dict.
         """
-        if not isinstance(db_table, DBTable):
-            raise TypeError("db_table must be DBTable object")
+        if not isinstance(table, DBTable):
+            raise TypeError("table must be DBTable object")
         if where_dict is None:
             where_dict = {}
         if kwargs:
             where_dict = {**where_dict, **kwargs}
         if not where_dict:
             return None
-        rows = db_table.fetch_rows(where_dict)
-        return cls.entities_from_table_rows(db_table, rows)
+        rows = table.fetch_rows(where_dict)
+        return cls.entities_from_table_rows(table, rows)
 
     @classmethod
-    def fetch(cls, db_table, where_dict=None, **kwargs):
+    def fetch(cls, table, where_dict=None, **kwargs):
         """
-        Returns a single entity from db_table matching where_dict.
+        Returns a single entity from table matching where_dict.
 
         args:
-            db_table (DBTable): Table to fetch from
+            table (DBTable): Table to fetch from
             where_dict: dictionary of column-value pairs. Value can be
                         "IS NULL", "IS NOT NULL", or a list of values.
                         For comparison operators (>, <, >=, <=, !=) there must
@@ -115,28 +113,28 @@ class DBEntity:
             **kwargs: Each additional keyword argument adds filter to column
                       following rules for where_dict.
         """
-        entity_list = cls.fetch_entities(db_table, where_dict, **kwargs)
+        entity_list = cls.fetch_entities(table, where_dict, **kwargs)
         if entity_list:
             return entity_list[0]
         return None
 
     @classmethod
-    def entity_from_row(cls, db_table, row_key):
+    def entity_from_row(cls, table, row_key):
         """
         Create a new entity associated with row_key.
         """
-        row = db_table.get_row_by_key(row_key)
+        row = table.get_row_by_key(row_key)
         if row:
-            return cls(db_table, row_key)
-        raise ValueError("row_key %s not in table %s" % (row_key, db_table.table_name))
+            return cls(table, row_key)
+        raise ValueError("row_key %s not in table %s" % (row_key, table.table_name))
 
     @classmethod
-    def generate_entities(cls, db_table):
+    def generate_entities(cls, table):
         """
-        Returns a dictionary of DBEntities corresponding to db_table.rows
+        Returns a dictionary of DBEntities corresponding to table.rows
         """
-        entity_dict = {row_key:cls.entity_from_row(db_table, row_key)
-                       for row_key in db_table.rows.keys()}
+        entity_dict = {row_key:cls.entity_from_row(table, row_key)
+                       for row_key in table.rows.keys()}
         return entity_dict
 
     @property
@@ -144,27 +142,39 @@ class DBEntity:
         """
         Returns dict of fields.
         """
-        return self.db_table.get_row_by_key(self.row_key)
+        return self.table.get_row_by_key(self.row_key)
+
+    def append(self, other, overwrite=False):
+        """
+        Append other's fields to entity. By default, only append fields
+        that are not already set. If overwrite is true, overwrite all
+        fields.
+        """
+        if not isinstance(other, DBEntity):
+            raise TypeError("other must be of type DBEntity")
+        for key, field in self.fields_dict.items():
+            if (field is None or overwrite) and other.get_field(key) is not None:
+                self.set_field(key, other.get_field(key))
 
     def get_field(self, field_name):
         """
         Returns the value of a field.
         """
-        return self.db_table.get_row_by_key(self.row_key).get(field_name)
+        return self.table.get_row_by_key(self.row_key).get(field_name)
 
     def set_field(self, field_name, field_value):
         """
         Sets the value of a field.
         """
-        if field_name not in self.db_table.fields:
+        if field_name not in self.table.fields:
             raise ValueError(
-                "Field %s not in fields for %s table." % (field_name, self.db_table.table_name)
+                "Field %s not in fields for %s table." % (field_name, self.table.table_name)
             )
-        self.db_table.set_field(self.row_key, field_name, field_value)
+        self.table.set_field(self.row_key, field_name, field_value)
 
     def save_to_db(self, duplicates=None):
         """
         Inserts entity into db and updates row_key.
         """
-        new_row_key = self.db_table.insert_row(self.fields_dict, duplicates)
+        new_row_key = self.table.insert_row(self.fields_dict, duplicates)
         self.row_key = new_row_key

@@ -193,6 +193,28 @@ class TestDBEntity():
         assert entity.fields_dict['url'] == "http://mikethicke.com"
         assert entity.fields_dict['content'] is None
 
+    def test_append(self):
+        logging.getLogger('bibliom.pytest').debug('-->TestDBEntity.test_append')
+        paper_dict = {
+            'title':    'A Paper',
+            'url':      "http://mikethicke.com",
+        }
+        paper2_dict = {
+            'title':        'A Different Paper',
+            'url':          "http://mikethicke.com",
+            'first_page':   10
+        }
+        paper_table = DBTable.get_table_object(self.manager, 'paper')
+        p1 = DBEntity(paper_table, fields_dict=paper_dict)
+        p2 = DBEntity(paper_table, fields_dict=paper2_dict)
+        p1.append(p2)
+        assert p1.first_page == 10
+        assert p1.title == 'A Paper'
+        p1.append(p2, overwrite=True)
+        assert p1.title == 'A Different Paper'
+        with pytest.raises(TypeError):
+            p1.append(paper2_dict)
+
     def test_get_field(self):
         logging.getLogger('bibliom.pytest').debug('-->TestDBEntity.test_get_field')
         self.manager.reset_database()
