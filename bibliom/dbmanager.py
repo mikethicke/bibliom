@@ -55,6 +55,24 @@ class DBManager:
         else:
             rep_string += "{:15}: {}".format("Tables", table_names)
         return rep_string
+    
+    @staticmethod
+    def find_global_manager():
+        """
+        If exactly one instance of dbmanager is instantiated globally, return
+        that instance. Otherwise return None.
+
+        This allows publication objects and tables to infer a manager on instantiation
+        rather than having to pass the manager as a parameter.
+        """
+        found_managers = []
+        for instance in globals().values():
+            if isinstance(instance, DBManager):
+                found_managers.append(instance)
+        if len(found_managers) == 1:
+            return found_managers[0]
+        else:
+            return None
 
     def _run_sql(self, sql_statements, ignore_exceptions=False):
         """
