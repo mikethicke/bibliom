@@ -48,6 +48,7 @@ class TestDBManager():
             password=DB_PASSWORD
         )
         assert isinstance(manager.db, MySQLdb.connections.Connection)
+        assert len(DBManager.manager_instances) == 2
 
     def test_str(self):
         logging.getLogger('bibliom.pytest').debug('-->TestDBManager.test_str')
@@ -406,3 +407,17 @@ class TestDBManager():
         self.manager.clear_table('author')
         authors = self.manager.fetch_rows('author')
         assert len(authors) == 0
+
+    def test_get_default_manager(self):
+        logging.getLogger('bibliom.pytest').debug('-->TestDBManager.test_get_default_manager')
+        self.manager.reset_database()
+        assert self.manager is DBManager.manager_instances[0]
+        self.manager.close()
+        DBManager.manager_instances = []
+        new_manager = DBManager.get_default_manager()
+        assert isinstance(new_manager, DBManager)
+        assert len(DBManager.manager_instances) == 1
+        assert new_manager.db is not None
+        assert new_manager.name is not None
+        assert new_manager.user is not None
+        assert new_manager.password is not None

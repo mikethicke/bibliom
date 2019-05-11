@@ -20,20 +20,20 @@ class TestDBTable:
     def test_init(self):
         logging.getLogger('bibliom.pytest').debug('-->TestDBTable.test_init')
         self.manager.reset_database()
-        table = DBTable(self.manager, 'paper')
+        table = DBTable('paper', self.manager)
         assert table.table_name == 'paper'
-        assert DBTable.get_table_object(self.manager, 'paper') == table
+        assert DBTable.get_table_object( 'paper', self.manager) == table
         with pytest.raises(exceptions.BiblioException):
-            duplicate_table = DBTable(self.manager, 'paper')
+            duplicate_table = DBTable('paper', self.manager)
 
     def test_str(self):
         logging.getLogger('bibliom.pytest').debug('-->TestDBTable.test_str')
-        table = DBTable.get_table_object(self.manager, 'paper')
+        table = DBTable.get_table_object( 'paper', self.manager)
         assert str(table) == 'test_db|paper'
     
     def test_repr(self):
         logging.getLogger('bibliom.pytest').debug('-->TestDBTable.test_repr')
-        table = DBTable.get_table_object(self.manager, 'paper')
+        table = DBTable.get_table_object( 'paper', self.manager)
         tr = repr(table)
         assert isinstance(tr, str)
 
@@ -93,14 +93,14 @@ class TestDBTable:
 
     def test_table_structure(self):
         logging.getLogger('bibliom.pytest').debug('-->TestDBTable.test_table_structure')
-        table = DBTable.get_table_object(self.manager, 'paper')
+        table = DBTable.get_table_object( 'paper', self.manager)
         assert isinstance(table.table_structure, dict)
         assert table.table_structure
 
     def test_get_table_object(self):
         logging.getLogger('bibliom.pytest').debug('-->TestDBTable.test_get_table_object')
         table_name = self.manager.list_tables()[0]
-        table_object = DBTable.get_table_object(self.manager, table_name)
+        table_object = DBTable.get_table_object(table_name, self.manager)
         assert isinstance(table_object, DBTable)
 
     def test_get_table_objects(self):
@@ -113,8 +113,8 @@ class TestDBTable:
     def test_insert_row(self):
         logging.getLogger('bibliom.pytest').debug('-->TestDBTable.test_insert_row')
         self.manager.reset_database()
-        paper_table = DBTable.get_table_object(self.manager, 'paper')
-        citation_table = DBTable.get_table_object(self.manager, 'citation')
+        paper_table = DBTable.get_table_object( 'paper', self.manager)
+        citation_table = DBTable.get_table_object('citation', self.manager)
         paper_rows = [
             {
                 'title':    'A Paper',
@@ -226,7 +226,7 @@ class TestDBTable:
                 'tile':     'A Bad Title'
             }
         ]
-        paper_table = DBTable.get_table_object(self.manager, 'paper')
+        paper_table = DBTable.get_table_object( 'paper', self.manager)
 
         new_key = paper_table.create_new_row(new_rows[0])
         new_row = paper_table.get_row_by_key(new_key)
@@ -239,7 +239,7 @@ class TestDBTable:
     def test_insert_many_new_rows(self):
         logging.getLogger('bibliom.pytest').debug('-->TestDBTable.test_insert_many_new_rows')
         self.manager.reset_database()
-        author_table = DBTable.get_table_object(self.manager, 'author')
+        author_table = DBTable.get_table_object( 'author', self.manager)
         for i in range(0, 100):
             author_table.create_new_row({
                 'last_name':    'Numberer',
@@ -264,7 +264,7 @@ class TestDBTable:
     def test_get_row_by_key(self):
         logging.getLogger('bibliom.pytest').debug('-->TestDBTable.test_get_row_by_key')
         self.manager.reset_database()
-        author_table = DBTable.get_table_object(self.manager, 'author')
+        author_table = DBTable.get_table_object( 'author', self.manager)
         author_table.insert_row({
             'last_name':    'Numberer',
             'given_names':  'Num',
@@ -297,7 +297,7 @@ class TestDBTable:
     def test_get_row_by_primary_key(self):
         logging.getLogger('bibliom.pytest').debug('-->TestDBTable.test_get_row_by_primary_key')
         self.manager.reset_database()
-        author_table = DBTable.get_table_object(self.manager, 'author')
+        author_table = DBTable.get_table_object( 'author', self.manager)
         author_table.insert_row({
             'last_name':    'Numberer',
             'given_names':  'Num',
@@ -311,7 +311,7 @@ class TestDBTable:
     def test_delete_rows(self):
         logging.getLogger('bibliom.pytest').debug('-->TestDBTable.test_delete_rows')
         self.manager.reset_database()
-        author_table = DBTable.get_table_object(self.manager, 'author')
+        author_table = DBTable.get_table_object( 'author', self.manager)
         for i in range(0, 100):
             author_table.create_new_row({
                 'last_name':    'Numberer',
@@ -334,7 +334,7 @@ class TestDBTable:
     def test_add_rows(self):
         logging.getLogger('bibliom.pytest').debug('-->TestDBTable.test_add_rows')
         self.manager.reset_database()
-        author_table = DBTable.get_table_object(self.manager, 'author')
+        author_table = DBTable.get_table_object( 'author', self.manager)
         rows = [{'last_name':    'Numberer',
                  'given_names':  str(i+1)}
                 for i in range(0, 100)]
@@ -358,7 +358,7 @@ class TestDBTable:
     def test_set_field(self):
         logging.getLogger('bibliom.pytest').debug('-->TestDBTable.test_add_field')
         self.manager.reset_database()
-        paper_table = DBTable.get_table_object(self.manager, 'paper')
+        paper_table = DBTable.get_table_object( 'paper', self.manager)
         paper_dict = {
             'title':    'A Paper',
             'url':      "http://mikethicke.com",
@@ -398,7 +398,7 @@ class TestDBTable:
     def test_sync_to_db(self):
         logging.getLogger('bibliom.pytest').debug('-->TestDBTable.test_sync_to_db')
         self.manager.reset_database()
-        author_table = DBTable.get_table_object(self.manager, 'author')
+        author_table = DBTable.get_table_object( 'author', self.manager)
         for i in range(0, 100):
             author_table.create_new_row({
                 'last_name':    'Numberer',
@@ -426,14 +426,14 @@ class TestDBTable:
         logging.getLogger('bibliom.pytest').debug('-->TestDBTable.test_sync_tables_to_db')
         self.manager.reset_database()
 
-        author_table = DBTable.get_table_object(self.manager, 'author')
+        author_table = DBTable.get_table_object( 'author', self.manager)
         for i in range(0, 100):
             author_table.create_new_row({
                 'last_name':    'Numberer',
                 'given_names':  str(i+1)
             })
 
-        paper_table = DBTable.get_table_object(self.manager, 'paper')
+        paper_table = DBTable.get_table_object( 'paper', self.manager)
         for i in range(0, 100):
             paper_table.create_new_row({
                 'title':    'Paper %d' % (i+1),
@@ -451,7 +451,7 @@ class TestDBTableExistingDB:
     """Tests for DBTable that use test database"""
     def test_head(self):
         logging.getLogger('bibliom.pytest').debug('-->TestDBTable.test_head')
-        paper_table = DBTable.get_table_object(self.manager, 'paper')
+        paper_table = DBTable.get_table_object( 'paper', self.manager)
         paper_table.head()
 
 

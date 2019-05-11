@@ -10,6 +10,7 @@ import os
 import MySQLdb
 
 from bibliom import exceptions
+from bibliom import settings
 from bibliom.constants import MAX_DB_RETRIES
 
 class DBManager:
@@ -19,7 +20,10 @@ class DBManager:
     class. This should maximize portability.
     """
 
-    def __init__(self, name=None, user=None, password=None, charset="utf8mb4", use_unicode=True):
+    manager_instances = []
+
+    def __init__(self, name=None, user=None, password=None, charset="utf8mb4", use_unicode=True,
+                 config=None):
         self.name = name
         self.user = user
         self.password = password
@@ -28,9 +32,19 @@ class DBManager:
         self.use_unicode = use_unicode
         self.db = None
 
-        self.connect()
+        try:
+            self.connect()
+        except exceptions.UnknownDatabaseError:
+            pass
 
         self.dbtables = {}
+
+        if config is None:
+            config = 'USER'
+        
+        self.config = config
+
+        DBManager.manager_instances.append(self)
 
     def __del__(self):
         self.close()
@@ -55,24 +69,6 @@ class DBManager:
         else:
             rep_string += "{:15}: {}".format("Tables", table_names)
         return rep_string
-    
-    @staticmethod
-    def find_global_manager():
-        """
-        If exactly one instance of dbmanager is instantiated globally, return
-        that instance. Otherwise return None.
-
-        This allows publication objects and tables to infer a manager on instantiation
-        rather than having to pass the manager as a parameter.
-        """
-        found_managers = []
-        for instance in globals().values():
-            if isinstance(instance, DBManager):
-                found_managers.append(instance)
-        if len(found_managers) == 1:
-            return found_managers[0]
-        else:
-            return None
 
     def _run_sql(self, sql_statements, ignore_exceptions=False):
         """
@@ -91,7 +87,9 @@ class DBManager:
                     retries = 0
                     while True:
                         try:
-                            cursor.execute(statement)
+                            result = cursor.execute(statement)
+                            if result:
+                                self.db.commit()
                             break
                         except MySQLdb.Error:
                             self.db.rollback()
@@ -126,7 +124,7 @@ class DBManager:
 
         Args:
             where_dict: dictionary of column-value pairs. Value can be
-                        "IS NULL", "IS NOT NULL", or a list of values.
+                        "NULL", "NOT NULL", or a list of values.
                         For comparison operators (>, <, >=, <=, !=) there must
                         be a space between operator and value.
 
@@ -149,7 +147,9 @@ class DBManager:
                 where += "`%s` IS NULL" % where_key
             elif where_value == 'NOT NULL':
                 where += "`%s` IS NOT NULL" % where_key
-            elif isinstance(where_value, list) and where_value:
+            elif isinstance(where_value, list):
+                if not where_value:
+                    continue
                 if (isinstance(where_value[0], str)
                         and where_value[0].startswith('%')):
                     where += "("
@@ -239,6 +239,33 @@ class DBManager:
                     'where_or_clause'    : where_or_clause}
         return None
 
+
+    @classmethod
+    def get_manager_for_config(cls, config):
+        """
+        Get a manger for a configuration setting. If a manager for
+        that config is instantiated, return the first one. If no manager is
+        instantiated, create one and return it.
+        """
+        for manager in DBManager.manager_instances:
+            if manager.config == config:
+                return manager
+        options = settings.get_settings_for_config(config)
+        manager = cls(name=options.get('database'),
+                      user=options.get('user'),
+                      password=options.get('password'),
+                      config=config)
+        return manager
+
+    @classmethod
+    def get_default_manager(cls):
+        """
+        Get manager for default configuration and return it. This is useful for
+        instantiating DBTable and DBEntity objects without having to explicitly
+        pass a manager.
+        """
+        return DBManager.get_manager_for_config('DEFAULT')
+
     def connect(self):
         """
         Connect to the database.
@@ -251,14 +278,15 @@ class DBManager:
             retries = 0
             while True:
                 try:
-                    self.db = MySQLdb.connect("localhost",
-                                            self.user,
-                                            self.password,
-                                            self.name,
-                                            charset=self.charset,
-                                            use_unicode=self.use_unicode,
-                                            connect_timeout=5)
-                    break;
+                    self.db = MySQLdb.connect(
+                        "localhost",
+                        self.user,
+                        self.password,
+                        self.name,
+                        charset=self.charset,
+                        use_unicode=self.use_unicode,
+                        connect_timeout=5
+                    )
                 except MySQLdb.Error as e:
                     if retries < MAX_DB_RETRIES:
                         retries += 1
@@ -284,7 +312,7 @@ class DBManager:
                 try:
                     self.db.close()
                     self.db = None
-                    break;
+                    break
                 except (MySQLdb.Error, MySQLdb.Warning):
                     if retries < MAX_DB_RETRIES:
                         retries += 1
@@ -324,21 +352,24 @@ class DBManager:
         if self.db is not None:
             self.close()
 
-        query = "CREATE DATABASE %s" % name
-
         try:
             temp_db = MySQLdb.connect("localhost",
                                       self.user,
                                       self.password,
                                       charset=self.charset,
-                                      use_unicode=self.use_unicode)
+                                      use_unicode=self.use_unicode,
+                                      autocommit="True")
         except MySQLdb.Error:
             logging.getLogger(__name__).exception("Error connecting to database server.")
             raise
 
+        query = "CREATE DATABASE %s" % name
+
         try:
             cursor = temp_db.cursor()
             cursor.execute(query)
+            temp_db.commit()
+            temp_db.close()
         except MySQLdb.Error:
             logging.getLogger(__name__).exception(
                 "Error attempting to create new database with name %s", name)
@@ -346,19 +377,26 @@ class DBManager:
             raise
         else:
             logging.getLogger(__name__).debug("Created database %s", name)
-
+            created_database = True
+        
         try:
-            query = "USE %s" % name
-            cursor.execute(query)
-        except MySQLdb.OperationalError:
-            logging.getLogger(__name__).exception(
-                "Error attempting to use database with name %s", name)
+            logging.getLogger(__name__).debug("Connecting to new database: %s", name)
+            self.name = name
+            self.connect()
+        except MySQLdb.Error:
+            logging.getLogger(__name__).exception("Error reconnecting to database %s", name)
+            self.name = None
             raise
 
         try:
+            logging.getLogger(__name__).debug("Executing SQL commands.")
+            if created_database:
+                logging.getLogger(__name__).debug("Database has been created.")
+            cursor = self.db.cursor()
             for command in sql_commands:
                 if command:
                     cursor.execute(command)
+                    self.db.commit()
             created_tables = True
         except MySQLdb.Error:
             logging.getLogger(__name__).exception("Error creating database tables.")
@@ -367,15 +405,12 @@ class DBManager:
         if not created_tables:
             query = "DROP DATABASE %s" % name
             try:
+                cursor = self.db.cursor()
                 cursor.execute(query)
-                temp_db.close()
             except MySQLdb.Error:
-                pass
+                logging.getLogger(__name__).exception("Error dropping database %s", self.name)
             raise exceptions.FailedDatabaseCreationError("Failed to create database tables.")
 
-        temp_db.close()
-        self.name = name
-        self.connect()
         logging.getLogger(__name__).debug("Successfully created database %s and tables.", name)
 
     def drop_database(self):
@@ -385,12 +420,17 @@ class DBManager:
         logging.getLogger(__name__).debug("Dropping database %s", self.name)
         if self.name is None:
             return
+        try:
+            self.connect()
+        except exceptions.UnknownDatabaseError:
+            return
         query = "DROP DATABASE %s" % self.name
         cursor = self.db.cursor()
         retries = 0
         while True:
             try:
                 cursor.execute(query)
+                self.db.commit()
                 self.close()
                 logging.getLogger(__name__).debug("Successfully dropped database.")
                 return
@@ -598,6 +638,8 @@ class DBManager:
         if kwargs:
             where_dict = {**where_dict, **kwargs}
         (where_clause, value_list) = DBManager._build_where(where_dict)
+        if not where_clause:
+            return None
         query = "SELECT * FROM %s WHERE %s" % (table_name, where_clause)
         if order_by:
             if isinstance(order_by, str):

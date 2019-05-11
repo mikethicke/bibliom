@@ -4,6 +4,7 @@ DBEntity class.
 
 from bibliom import exceptions
 from bibliom.dbtable import DBTable
+from bibliom.dbmanager import DBManager
 
 class DBEntity:
     """
@@ -13,13 +14,38 @@ class DBEntity:
     """
     def __init__(self,
                  table,
+                 manager=None,
                  row_key=0,
-                 fields_dict=None):
+                 fields_dict=None,
+                 protect_fields=False,
+                 **kwargs):
+        if isinstance(table, str):
+            if manager is None:
+                manager = DBManager.get_default_manager()
+                if manager is None:
+                    raise exceptions.BiblioException(
+                        'Attempting to create DBEntity, but not given DBTable ' +
+                        'instance or manager, and no default manager found.'
+                    )
+            table = DBTable.get_table_object(table, manager)
+        if not isinstance(table, DBTable):
+            raise TypeError('table must be DBTable or table name as string')    
+
         self.__dict__['table'] = table
+
+        self.protect_fields = protect_fields
+
+        if kwargs:
+            if not fields_dict:
+                fields_dict = {}
+            fields_dict = {**fields_dict, **kwargs}
 
         if row_key:
             self.row_key = row_key
             self.table.get_row_by_key(row_key)
+            if fields_dict:
+                for key, value in fields_dict:
+                    self.set_field(key, value)
         else:
             self.row_key = self.table.create_new_row(fields_dict)
 
@@ -33,6 +59,8 @@ class DBEntity:
 
     def __setattr__(self, attr_name, value):
         if attr_name in self.table.fields:
+            if self.protect_fields and self.get_field(attr_name) is not None:
+                return
             self.set_field(attr_name, value)
         else:
             object.__setattr__(self, attr_name, value)
@@ -67,6 +95,8 @@ class DBEntity:
         """
         Returns a list of entities from table corresponding to rows.
         """
+        if not rows:
+            return []
         if not isinstance(rows, dict):
             raise TypeError('rows must be dictionary of table rows indexed by row_key')
         if not isinstance(table, DBTable):
@@ -125,7 +155,7 @@ class DBEntity:
         """
         row = table.get_row_by_key(row_key)
         if row:
-            return cls(table, row_key)
+            return cls(table, row_key=row_key)
         raise ValueError("row_key %s not in table %s" % (row_key, table.table_name))
 
     @classmethod
@@ -178,3 +208,21 @@ class DBEntity:
         """
         new_row_key = self.table.insert_row(self.fields_dict, duplicates)
         self.row_key = new_row_key
+
+    def delete_from_db(self):
+        """
+        Deletes entity from database.
+        """
+        if self.table.row_status[self.row_key] == DBTable.RowStatus.NEW:
+            raise exceptions.DBUnsyncedError(
+                'Attempting to delete a row that has not yet been saved to db.'
+            )
+        self.table.delete_row(self.row_key)
+
+    def undelete(self, duplicates=None):
+        """
+        Restores a deleted entity and resaves to database.
+        """
+        self.table.row_status[self.row_key] = DBTable.RowStatus.UNSYNCED
+        self.save_to_db(duplicates)
+

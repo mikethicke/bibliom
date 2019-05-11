@@ -11,14 +11,17 @@ class Paper(DBEntity):
     """
     A single publication.
     """
-    def __init__(self, table=None, manager=None, row_key=None, fields_dict=None):
+    def __init__(self, table=None, manager=None, row_key=None, fields_dict=None, **kwargs):
         if table is None:
-            if manager is None:
-                raise ValueError(
-                    "When initializing, at least one of table and manager must not be None."
-                )
-            table = DBTable.get_table_object(manager, 'paper')
-        DBEntity.__init__(self, table=table, row_key=row_key, fields_dict=fields_dict)
+            table = 'paper'
+        DBEntity.__init__(
+            self,
+            table=table,
+            manager=manager,
+            row_key=row_key,
+            fields_dict=fields_dict,
+            **kwargs
+        )
 
         self.was_retracted = False
 
@@ -32,10 +35,10 @@ class Paper(DBEntity):
         """
         if self.idpaper is None:
             return []
-        pa_table = DBTable.get_table_object(self.table.manager, 'paper_author')
+        pa_table = DBTable.get_table_object('paper_author', self.table.manager)
         paper_authors = pa_table.fetch_rows({'idpaper':self.idpaper})
         author_ids = [pa['idauthor'] for pa in paper_authors.values()]
-        author_table = DBTable.get_table_object(self.table.manager, 'author')
+        author_table = DBTable.get_table_object('author', self.table.manager)
         authors = Author.fetch_entities(author_table, {'idauthor':author_ids})
         return authors
 
@@ -46,7 +49,7 @@ class Paper(DBEntity):
         """
         if self.idjournal is None:
             return None
-        journal_table = DBTable.get_table_object(self.table.manager, 'journal')
+        journal_table = DBTable.get_table_object('journal', self.table.manager)
         journal = Journal.fetch(journal_table, {'idjournal': self.idjournal})
         return journal
 
@@ -57,9 +60,9 @@ class Paper(DBEntity):
         """
         if self.idpaper is None:
             return []
-        citation_table = DBTable.get_table_object(self.table.manager, 'citation')
+        citation_table = DBTable.get_table_object('citation', self.table.manager)
         citations = Citation.fetch_entities(citation_table, {'source_id':self.idpaper})
-        cited_papers = [Paper.fetch(self.table, {'idpaper':c.target_id})
+        cited_papers = [Paper.fetch(manager=self.table.manager, idpaper=c.target_id)
                         for c in citations]
         return cited_papers
 
@@ -70,9 +73,9 @@ class Paper(DBEntity):
         """
         if self.idpaper is None:
             return []
-        citation_table = DBTable.get_table_object(self.table.manager, 'citation')
+        citation_table = DBTable.get_table_object('citation', self.table.manager)
         citations = Citation.fetch_entities(citation_table, {'target_id':self.idpaper})
-        citing_papers = [Paper.fetch(self.table, {'idpaper':c.source_id})
+        citing_papers = [Paper.fetch(manager=self.table.manager, idpaper=c.source_id)
                          for c in citations]
         return citing_papers
 
@@ -103,6 +106,22 @@ class Paper(DBEntity):
             citations_str += "%s:%s" % (year, citation_count)
         self.citation_history = citations_str
 
+    @classmethod
+    def fetch(cls, manager=None, where_dict=None, **kwargs):
+        """
+        Fetch a paper.
+        """
+        table = DBTable.get_table_object('paper', manager)
+        return super().fetch(table, where_dict=where_dict, **kwargs)
+
+    @classmethod
+    def fetch_papers(cls, manager=None, where_dict=None, **kwargs):
+        """
+        Fetch papers matching where_dict.
+        """
+        table = DBTable.get_table_object('paper', manager)
+        return super().fetch_entities(table=table, where_dict=where_dict, **kwargs)
+
     def cite(self, target):
         """
         Create a citation from self to target paper and return it.
@@ -121,10 +140,17 @@ class Author(DBEntity):
     """
     A single Author.
     """
-    def __init__(self, table=None, manager=None, row_key=None, fields_dict=None):
+    def __init__(self, table=None, manager=None, row_key=None, fields_dict=None, **kwargs):
         if table is None:
-            table = DBTable.get_table_object(manager, 'author')
-        DBEntity.__init__(self, table=table, row_key=row_key, fields_dict=fields_dict)
+            table = 'author'
+        DBEntity.__init__(
+            self,
+            table=table,
+            manager=manager,
+            row_key=row_key,
+            fields_dict=fields_dict,
+            **kwargs
+        )
 
     def __str__(self):
         return "%s, %s" % (str(self.last_name), str(self.given_names))
@@ -151,10 +177,10 @@ class Author(DBEntity):
         """
         if self.idauthor is None:
             return []
-        pa_table = DBTable.get_table_object(self.table.manager, 'paper_author')
+        pa_table = DBTable.get_table_object('paper_author', self.table.manager)
         paper_authors = pa_table.fetch_rows({'idauthor':self.idauthor})
         paper_ids = [pa['idpaper'] for pa in paper_authors.values()]
-        paper_table = DBTable.get_table_object(self.table.manager, 'paper')
+        paper_table = DBTable.get_table_object('paper', self.table.manager)
         papers = Paper.fetch_entities(paper_table, {'idpaper':paper_ids})
         return papers
 
@@ -162,10 +188,17 @@ class Journal(DBEntity):
     """
     A single journal.
     """
-    def __init__(self, table=None, manager=None, row_key=None, fields_dict=None):
+    def __init__(self, table=None, manager=None, row_key=None, fields_dict=None, **kwargs):
         if table is None:
-            table = DBTable.get_table_object(manager, 'journal')
-        DBEntity.__init__(self, table=table, row_key=row_key, fields_dict=fields_dict)
+            table = 'journal'
+        DBEntity.__init__(
+            self,
+            table=table,
+            manager=manager,
+            row_key=row_key,
+            fields_dict=fields_dict,
+            **kwargs
+        )
 
     def __str__(self):
         return str(self.title)
@@ -175,7 +208,7 @@ class Journal(DBEntity):
         """
         Get list of papers contained in journal.
         """
-        paper_table = DBTable.get_table_object(self.table.manager, 'paper')
+        paper_table = DBTable.get_table_object('paper', self.table.manager)
         papers = Paper.fetch_entities(paper_table, {'idjournal':self.idjournal})
         return papers
 
@@ -183,10 +216,17 @@ class Citation(DBEntity):
     """
     A single citation from source paper to target paper.
     """
-    def __init__(self, table=None, manager=None, row_key=None, fields_dict=None):
+    def __init__(self, table=None, manager=None, row_key=None, fields_dict=None, **kwargs):
         if table is None:
-            table = DBTable.get_table_object(manager, 'citation')
-        DBEntity.__init__(self, table=table, row_key=row_key, fields_dict=fields_dict)
+            table = 'citation'
+        DBEntity.__init__(
+            self,
+            table=table,
+            manager=manager,
+            row_key=row_key,
+            fields_dict=fields_dict,
+            **kwargs
+        )
 
     def cite(self, source_paper, target_paper):
         """
@@ -200,8 +240,7 @@ class Citation(DBEntity):
         """
         Returns Paper object corresponding to source paper.
         """
-        paper_table = DBTable.get_table_object(self.table.manager, 'paper')
-        s_paper = Paper.fetch(paper_table, {'idpaper':self.source_id})
+        s_paper = Paper.fetch(manager=self.table.manager, idpaper=self.source_id)
         return s_paper
 
     @source_paper.setter
@@ -216,8 +255,7 @@ class Citation(DBEntity):
         """
         Returns Paper object corresponding to target paper.
         """
-        paper_table = DBTable.get_table_object(self.table.manager, 'paper')
-        t_paper = Paper.fetch(paper_table, {'idpaper':self.target_id})
+        t_paper = Paper.fetch(manager=self.table.manager, idpaper=self.target_id)
         return t_paper
 
     @target_paper.setter

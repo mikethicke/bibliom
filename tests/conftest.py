@@ -9,51 +9,32 @@ import logging
 import pytest
 
 from bibliom import dbmanager
-from bibliom import exceptions
 
 logging.getLogger('bibliom.pytest').debug("### Beginning pytest session. ###")
 
-DB_NAME = 'test_db'
-DB_USER = 'test_user'
-DB_PASSWORD = 'jfYf2NoJr4DMHrF,3b'
-
 @pytest.fixture(scope="session")
-def connected_manager():
-    logging.getLogger('bibliom.pytest').debug('Pytest: connected_manager fixture')
-    try:
-        manager = dbmanager.DBManager(
-            name=DB_NAME,
-            user=DB_USER,
-            password=DB_PASSWORD
-        )
-        manager.reset_database()
-    except exceptions.UnknownDatabaseError:
-        manager = dbmanager.DBManager(
-            name=None,
-            user=DB_USER,
-            password=DB_PASSWORD
-        )
-        manager.create_database(DB_NAME)
-    yield manager
-
-    logging.getLogger('bibliom.pytest').debug('Pytest: closing connected_manager')
-    if manager.db is not None and manager.db.open:
-        manager.close()
-
-@pytest.fixture(scope="class")
-def class_manager(request, connected_manager):
-    logging.getLogger('bibliom.pytest').debug('Pytest: class_manager fixture')
-    request.cls.manager = connected_manager
-
-@pytest.fixture(scope="module")
-def import_small_database(connected_manager):
+def import_small_database():
+    """
+    Imports a small database to test_db for testing.
+    """
     logging.getLogger('bibliom.pytest').debug('Pytest: import_small_database fixture')
-    connected_manager.reset_database()
+    manager = dbmanager.DBManager.get_manager_for_config(config='TEST')
+    manager.reset_database()
     sql_file = os.path.join(
         os.path.abspath(os.path.join(os.path.dirname(__file__), "..")),
         'test_data',
         'small-test-database.sql')
-    connected_manager._run_sql_file(sql_file)
+    manager._run_sql_file(sql_file)
+
+
+@pytest.fixture(scope="class")
+def class_manager(request):
+    logging.getLogger('bibliom.pytest').debug('Pytest: class_manager fixture')
+    manager = dbmanager.DBManager.get_manager_for_config(config='TEST')
+    if manager.db is None:
+        manager.reset_database()
+    request.cls.manager = manager
+
 
 @pytest.fixture(scope='class')
 def file_paths(request):

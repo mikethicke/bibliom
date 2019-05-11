@@ -11,19 +11,18 @@ from bibliom.publication_objects import Paper, Author, Journal, Citation
 from bibliom.dbtable import DBTable
 from bibliom import exceptions
 
-@pytest.mark.usefixtures('import_small_database')
 @pytest.mark.usefixtures('class_manager')
 class TestPaper():
     """
     Unit tests for Paper class.
     """
-    def test_init(self):
+    def test_init(self, import_small_database):
         logging.getLogger('bibliom.pytest').debug('-->TestPaper.test_init')
         new_paper = Paper(manager=self.manager)
         assert isinstance(new_paper, Paper)
         assert not new_paper.was_retracted
 
-        paper_table = DBTable.get_table_object(self.manager, 'paper')
+        paper_table = DBTable.get_table_object('paper', self.manager)
         new_paper = Paper(table=paper_table)
         assert isinstance(new_paper, Paper)
         assert not new_paper.was_retracted
@@ -43,28 +42,23 @@ class TestPaper():
         )
         assert paper.title
 
-    def test_str(self):
+    def test_str(self, import_small_database):
         logging.getLogger('bibliom.pytest').debug('-->TestPaper.test_str')
-        paper_table = DBTable.get_table_object(self.manager, 'paper')
         paper = Paper.fetch(
-            table=paper_table,
             where_dict={'doi': '10.1089/ars.2017.7361'}
         )
         assert str(paper) == (
             'Redox-Sensing Iron-Sulfur Cluster Regulators (10.1089/ars.2017.7361)'
         )
 
-    def test_authors(self):
+    def test_authors(self, import_small_database):
         logging.getLogger('bibliom.pytest').debug('-->TestPaper.test_authors')
-        paper_table = DBTable.get_table_object(self.manager, 'paper')
         paper = Paper.fetch(
-            table=paper_table,
             where_dict={'doi': '10.1089/ars.2017.7361'}
         )
         assert len(paper.authors) == 2
 
         new_paper = Paper(
-            table=paper_table,
             fields_dict={
                 'title':    "A New Paper",
                 'doi':      "10.1231/12312"
@@ -72,26 +66,21 @@ class TestPaper():
         )
         assert len(new_paper.authors) == 0
 
-    def test_journal(self):
+    def test_journal(self, import_small_database):
         logging.getLogger('bibliom.pytest').debug('-->TestPaper.test_journal')
-        paper_table = DBTable.get_table_object(self.manager, 'paper')
         paper = Paper.fetch(
-            table=paper_table,
             where_dict={'doi': '10.1089/ars.2017.7361'}
         )
         assert paper.journal.title == 'ANTIOXIDANTS & REDOX SIGNALING'
 
-    def test_cited_papers(self):
+    def test_cited_papers(self, import_small_database):
         logging.getLogger('bibliom.pytest').debug('-->TestPaper.test_cited_papers')
-        paper_table = DBTable.get_table_object(self.manager, 'paper')
         paper = Paper.fetch(
-            table=paper_table,
             where_dict={'doi': '10.1089/ars.2017.7361'}
         )
         assert len(paper.cited_papers) == 177
 
         new_paper = Paper(
-            table=paper_table,
             fields_dict={
                 'title':    "A New Paper",
                 'doi':      "10.1231/12312"
@@ -99,17 +88,14 @@ class TestPaper():
         )
         assert len(new_paper.cited_papers) == 0
 
-    def test_citing_papers(self):
+    def test_citing_papers(self, import_small_database):
         logging.getLogger('bibliom.pytest').debug('-->TestPaper.test_citing_papers')
-        paper_table = DBTable.get_table_object(self.manager, 'paper')
         paper = Paper.fetch(
-            table=paper_table,
             where_dict={'doi': '10.1016/j.ijhydene.2016.06.178'}
         )
         assert len(paper.citing_papers) == 5
 
         new_paper = Paper(
-            table=paper_table,
             fields_dict={
                 'title':    "A New Paper",
                 'doi':      "10.1231/12312"
@@ -117,15 +103,12 @@ class TestPaper():
         )
         assert len(new_paper.citing_papers) == 0
 
-    def test_cite(self):
+    def test_cite(self, import_small_database):
         logging.getLogger('bibliom.pytest').debug('-->TestPaper.test_cite')
-        paper_table = DBTable.get_table_object(self.manager, 'paper')
         source_paper = Paper.fetch(
-            table=paper_table,
             where_dict={'doi': '10.1016/j.ijhydene.2016.06.178'}
         )
         target_paper = Paper.fetch(
-            table=paper_table,
             where_dict={'doi': '10.1016/j.ijhydene.2016.07.026'}
         )
         new_citation = source_paper.cite(target_paper)
@@ -145,7 +128,7 @@ class TestPaper():
                 break
         assert found
 
-        new_paper = Paper(paper_table)
+        new_paper = Paper()
         with pytest.raises(exceptions.DBUnsyncedError):
             new_paper.cite(target_paper)
         with pytest.raises(exceptions.DBUnsyncedError):
@@ -154,15 +137,35 @@ class TestPaper():
         with pytest.raises(TypeError):
             source_paper.cite("hello")
 
-@pytest.mark.usefixtures('import_small_database')
+    def test_fetch(self, import_small_database):
+        logging.getLogger('bibliom.pytest').debug('-->TestPaper.test_fetch')
+        paper = Paper.fetch(
+            manager=self.manager,
+            where_dict={'doi': '10.1016/j.ijhydene.2016.06.178'}
+        )
+        assert paper.title == (
+            'Plasma equilibrium reconstruction for the nuclear fusion of ' +
+            'magnetically confined hydrogen isotopes'
+        )
+        paper = Paper.fetch(where_dict={'doi': '10.1016/j.ijhydene.2016.06.178'})
+        assert paper.title == (
+            'Plasma equilibrium reconstruction for the nuclear fusion of ' +
+            'magnetically confined hydrogen isotopes'
+        )
+        paper = Paper.fetch(doi='10.1016/j.ijhydene.2016.06.178')
+        assert paper.title == (
+            'Plasma equilibrium reconstruction for the nuclear fusion of ' +
+            'magnetically confined hydrogen isotopes'
+        )
+
 @pytest.mark.usefixtures('class_manager')
 class TestAuthor():
     """
     Unit tests for Author class.
     """
-    def test_init(self):
+    def test_init(self, import_small_database):
         logging.getLogger('bibliom.pytest').debug('-->TestAuthor.test_init')
-        author_table = DBTable.get_table_object(self.manager, 'author')
+        author_table = DBTable.get_table_object('author', self.manager)
 
         new_author = Author(
             manager=self.manager
@@ -204,7 +207,7 @@ class TestAuthor():
 
     def test_from_string(self):
         logging.getLogger('bibliom.pytest').debug('-->TestAuthor.test_from_string')
-        author_table = DBTable.get_table_object(self.manager, 'author')
+        author_table = DBTable.get_table_object('author', self.manager)
         new_author = Author.from_string(author_table, 'Thicke, Michael Lowell Ellis')
         assert new_author.last_name == 'Thicke'
         assert new_author.given_names == 'Michael Lowell Ellis'
@@ -213,9 +216,9 @@ class TestAuthor():
         assert new_author.corporate
         assert new_author.last_name == 'IPCC'
 
-    def test_papers(self):
+    def test_papers(self, import_small_database):
         logging.getLogger('bibliom.pytest').debug('-->TestAuthor.test_papers')
-        author_table = DBTable.get_table_object(self.manager, 'author')
+        author_table = DBTable.get_table_object('author', self.manager)
 
         author = Author(
             table=author_table,
@@ -232,15 +235,14 @@ class TestAuthor():
         )
         assert len(new_author.papers) == 0
 
-@pytest.mark.usefixtures('import_small_database')
 @pytest.mark.usefixtures('class_manager')
 class TestJournal():
     """
     Unit tests for Journal class.
     """
-    def test_init(self):
+    def test_init(self, import_small_database):
         logging.getLogger('bibliom.pytest').debug('-->TestJournal.test_init')
-        journal_table = DBTable.get_table_object(self.manager, 'journal')
+        journal_table = DBTable.get_table_object('journal', self.manager)
 
         journal = Journal(manager=self.manager)
         assert isinstance(journal, Journal)
@@ -262,9 +264,9 @@ class TestJournal():
         )
         assert new_journal.title == 'A Journal'
 
-    def test_papers(self):
+    def test_papers(self, import_small_database):
         logging.getLogger('bibliom.pytest').debug('-->TestJournal.test_papers')
-        journal_table = DBTable.get_table_object(self.manager, 'journal')
+        journal_table = DBTable.get_table_object('journal', self.manager)
 
         journal = Journal.fetch(
             table=journal_table,
@@ -274,15 +276,14 @@ class TestJournal():
         )
         assert len(journal.papers) == 148
 
-@pytest.mark.usefixtures('import_small_database')
 @pytest.mark.usefixtures('class_manager')
 class TestCitation():
     """
     Unit tests for Citation class.
     """
-    def test_init(self):
+    def test_init(self, import_small_database):
         logging.getLogger('bibliom.pytest').debug('-->TestCitation.test_init')
-        citation_table = DBTable.get_table_object(self.manager, 'citation')
+        citation_table = DBTable.get_table_object('citation', self.manager)
 
         citation = Citation(table=citation_table)
         assert isinstance(citation, Citation)
@@ -313,17 +314,14 @@ class TestCitation():
         assert new_citation.source_id == 100
         assert new_citation.target_id == 200
 
-    def test_cite(self):
+    def test_cite(self, import_small_database):
         logging.getLogger('bibliom.pytest').debug('-->TestCitation.test_cite')
-        citation_table = DBTable.get_table_object(self.manager, 'citation')
-        paper_table = DBTable.get_table_object(self.manager, 'paper')
+        citation_table = DBTable.get_table_object('citation', self.manager)
 
         source_paper = Paper.fetch(
-            table=paper_table,
             where_dict={'doi': '10.1016/j.ijhydene.2016.06.178'}
         )
         target_paper = Paper.fetch(
-            table=paper_table,
             where_dict={'doi': '10.1016/j.ijhydene.2016.07.026'}
         )
 
@@ -332,10 +330,10 @@ class TestCitation():
         assert new_citation.source_id == source_paper.idpaper
         assert new_citation.target_id == target_paper.idpaper
 
-    def test_source_paper_target_paper(self):
+    def test_source_paper_target_paper(self, import_small_database):
         logging.getLogger('bibliom.pytest').debug('-->TestCitation.test_source_paper_target_paper')
-        citation_table = DBTable.get_table_object(self.manager, 'citation')
-        paper_table = DBTable.get_table_object(self.manager, 'paper')
+        citation_table = DBTable.get_table_object('citation', self.manager)
+        paper_table = DBTable.get_table_object( 'paper', self.manager)
 
         citation = Citation(
             table=citation_table,

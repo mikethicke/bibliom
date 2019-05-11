@@ -6,6 +6,7 @@ import logging
 import MySQLdb
 from tabulate import tabulate
 
+from bibliom.dbmanager import DBManager
 from bibliom import exceptions
 from bibliom.constants import INFO_THRESHOLD, REPORT_FREQUENCY
 
@@ -16,7 +17,14 @@ class DBTable:
     """
     NEW_ID_PREFIX = "db_table_new"
 
-    def __init__(self, manager, table_name):
+    def __init__(self, table_name, manager=None):
+        if manager is None:
+            manager = DBManager.get_default_manager()
+            if manager is None:
+                raise exceptions.BiblioException(
+                    'Attempted to create DBTable instance with default manager,' +
+                    ' but there is not exactly one manager available.' 
+                )
         if table_name in manager.existing_table_object_keys():
             raise exceptions.BiblioException(
                 'Attempted to create a DBTable object, but one ' +
@@ -89,15 +97,21 @@ class DBTable:
         return key_dict
 
     @staticmethod
-    def get_table_object(manager, table_name):
+    def get_table_object(table_name, manager=None):
         """
         If DBTable object for table_name exists, return it. Otherwise
         return new DBTable for table_name and add it to self.dtbales.
         """
+        if manager is None:
+            manager = DBManager.get_default_manager()
+            if manager is None:
+                raise exceptions.BiblioException(
+                    'Manager is None and no default manager found.'
+                )
         if table_name in manager.dbtables.keys():
             return manager.dbtables[table_name]
         if table_name in manager.list_tables():
-            new_dbtable = DBTable(manager, table_name)
+            new_dbtable = DBTable(table_name, manager)
             return new_dbtable
         return False
 
@@ -108,7 +122,7 @@ class DBTable:
         Keys are table names.
         """
         for table_name in manager.list_tables():
-            DBTable.get_table_object(manager, table_name)
+            DBTable.get_table_object(table_name, manager)
         table_object_dictionary = manager.dbtables
         return table_object_dictionary
 
@@ -154,6 +168,8 @@ class DBTable:
                                column following rules for where_dict.
         """
         rows = self.manager.fetch_rows(self.table_name, where_dict, limit, order_by, **kwargs)
+        if rows is None:
+            return None
 
         primary_keys = self.manager.primary_key_list(self.table_name)
         rows_dict = {}
@@ -192,6 +208,7 @@ class DBTable:
                 break
         rows = self.fetch_rows(where_dict=None, limit=num_rows, order_by=auto_increment_field)
         self.print_rows(rows, max_width)
+        return rows
 
     def get_row_by_key(self, row_key):
         """
@@ -316,17 +333,17 @@ class DBTable:
                 new_row_key = DBTable.dict_to_key({pkl[0]:new_pri_key})
                 row_dict[pkl[0]] = new_pri_key
             elif new_pri_key == -1:
-                # Row inserted successfuly, but no AUTO INCRIMENT primary key
+                # Row inserted successfuly, but no AUTO INCREMENT primary key
                 # so primary key must be a subset of row_dict.
                 new_key_dict = {key:row_dict[key]
                                 for key in self.manager.primary_key_list(self.table_name)}
                 new_row_key = DBTable.dict_to_key(new_key_dict)
             else:
                 raise exceptions.BiblioException(
-                    'Primary key is neither AUTO INCRIMENT nor subset of row_dict.')
+                    'Primary key is neither AUTO INCREMENT nor subset of row_dict.')
             self.rows[new_row_key] = {}
-            for field_key in self.fields:
-                self.rows[new_row_key][field_key] = row_dict.get(field_key)
+            self.rows[new_row_key] = {field_key:row_dict.get(field_key) 
+                                      for field_key in self.fields}
             self.row_status[new_row_key] = DBTable.RowStatus.SYNCED
             return new_row_key
 
@@ -380,7 +397,7 @@ class DBTable:
             table_name (str): Name of the table to delete from.
             key (str, int or dict): Primary key or key dict of row to delete.
         """
-        del self.rows[row_key]
+        self.row_status[row_key] = self.RowStatus.DELETED
         return self.manager.delete_rows(
             self.table_name,
             DBTable.key_to_dict(row_key))
@@ -402,6 +419,7 @@ class DBTable:
         NEW = 0
         SYNCED = 1
         UNSYNCED = 2
+        DELETED = 3
 
     def create_new_row(self, fields_dict=None):
         """
@@ -458,6 +476,8 @@ class DBTable:
         row_keys = list(self.rows.keys())
         for count, row_key in enumerate(row_keys):
             row_dict = self.rows[row_key]
+            if self.row_status[row_key] == DBTable.RowStatus.DELETED:
+                break
             if self.row_status[row_key] == DBTable.RowStatus.NEW:
                 new_row_key = self.insert_row(row_dict)
                 self.row_status[new_row_key] = DBTable.RowStatus.SYNCED

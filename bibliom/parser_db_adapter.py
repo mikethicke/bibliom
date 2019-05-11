@@ -50,11 +50,11 @@ def _wok_to_db(parser, manager, duplicates=None):
     to database.
     """
     logging.getLogger(__name__).info("Importing Web of Knowledge records into database.")
-    paper_table = DBTable.get_table_object(manager, 'paper')
-    author_table = DBTable.get_table_object(manager, 'author')
-    journal_table = DBTable.get_table_object(manager, 'journal')
-    paper_author_table = DBTable.get_table_object(manager, 'paper_author')
-    keyword_table = DBTable.get_table_object(manager, 'paper_keyword')
+    paper_table = DBTable.get_table_object('paper', manager)
+    author_table = DBTable.get_table_object('author', manager)
+    journal_table = DBTable.get_table_object('journal', manager)
+    paper_author_table = DBTable.get_table_object('paper_author', manager)
+    keyword_table = DBTable.get_table_object('paper_keyword', manager)
     new_paper_list = []
     logging.getLogger(__name__).info("Importing %s records into database.", len(parser.parsed_list))
     for count, record in enumerate(parser.parsed_list):
@@ -166,8 +166,8 @@ def _wok_to_db(parser, manager, duplicates=None):
                 len(new_paper_list))
     logging.getLogger(__name__).info(
         "Importing %s citations into db.",
-        len(DBTable.get_table_object(manager, 'citation').rows))
-    DBTable.get_table_object(manager, 'citation').sync_to_db()
+        len(DBTable.get_table_object('citation', manager).rows))
+    DBTable.get_table_object('citation', manager).sync_to_db()
 
 def _wch_to_db(parser, manager, duplicates=None, parse_authors=False):
     """
@@ -177,11 +177,11 @@ def _wch_to_db(parser, manager, duplicates=None, parse_authors=False):
         "Importing Web of Knowledge Citation History records into database.")
     if duplicates is None:
         duplicates = DBTable.Duplicates.INSERT
-    paper_table = DBTable.get_table_object(manager, 'paper')
-    author_table = DBTable.get_table_object(manager, 'author')
-    journal_table = DBTable.get_table_object(manager, 'journal')
-    paper_author_table = DBTable.get_table_object(manager, 'paper_author')
-    keyword_table = DBTable.get_table_object(manager, 'paper_keyword')
+    paper_table = DBTable.get_table_object('paper', manager)
+    author_table = DBTable.get_table_object('author', manager)
+    journal_table = DBTable.get_table_object('journal', manager)
+    paper_author_table = DBTable.get_table_object('paper_author', manager)
+    keyword_table = DBTable.get_table_object('paper_keyword', manager)
 
     logging.getLogger(__name__).info(
         "Importing %s records into database.", 
@@ -212,7 +212,6 @@ def _wch_to_db(parser, manager, duplicates=None, parse_authors=False):
             if m.group(2) is not None:
                 new_paper.retracted_year = m.group(2)
             new_paper.was_retracted = True
-
         new_paper.save_to_db(duplicates)
 
         if new_paper.was_retracted:

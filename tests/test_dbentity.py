@@ -20,7 +20,7 @@ class TestDBEntity():
     def test_init(self):
         logging.getLogger('bibliom.pytest').debug('-->TestDBEntity.test_init')
         self.manager.reset_database()
-        paper_table = DBTable.get_table_object(self.manager, 'paper')
+        paper_table = DBTable.get_table_object( 'paper', self.manager)
         paper_dict = {
             'title':    'A Paper',
             'url':      "http://mikethicke.com",
@@ -29,18 +29,32 @@ class TestDBEntity():
         entity = DBEntity(paper_table, fields_dict=paper_dict)
         assert entity.title == 'A Paper'
         assert entity.idpaper == 1
+
         entity2 = DBEntity.entity_from_row(paper_table, entity.row_key)
         assert entity2.title == 'A Paper'
-        entity3 = DBEntity(paper_table, entity.row_key)
+
+        entity3 = DBEntity(paper_table, row_key=entity.row_key)
         assert entity3.title == 'A Paper'
 
         entity4 = DBEntity(paper_table)
         assert entity4.title is None
-    
+
+        entity5 = DBEntity('paper', manager=self.manager, fields_dict=paper_dict)
+        assert entity5.title == 'A Paper'
+        assert entity5.table == paper_table
+
+        entity6 = DBEntity('paper', fields_dict=paper_dict)
+        assert entity6.title == 'A Paper'
+        assert entity6.table == paper_table
+
+        entity7 = DBEntity('paper', title='Another Paper')
+        assert entity7.title == 'Another Paper'
+        assert entity7.table == paper_table
+
     def test_repr(self):
         logging.getLogger('bibliom.pytest').debug('-->TestDBEntity.test_repr')
         self.manager.reset_database()
-        paper_table = DBTable.get_table_object(self.manager, 'paper')
+        paper_table = DBTable.get_table_object( 'paper', self.manager)
         paper_dict = {
             'title':    'A Paper',
             'url':      "http://mikethicke.com",
@@ -53,7 +67,7 @@ class TestDBEntity():
     def test_getattr(self):
         logging.getLogger('bibliom.pytest').debug('-->TestDBEntity.test_getattr')
         self.manager.reset_database()
-        paper_table = DBTable.get_table_object(self.manager, 'paper')
+        paper_table = DBTable.get_table_object( 'paper', self.manager)
         paper_dict = {
             'title':    'A Paper',
             'url':      "http://mikethicke.com",
@@ -68,7 +82,7 @@ class TestDBEntity():
     def test_setattr(self):
         logging.getLogger('bibliom.pytest').debug('-->TestDBEntity.test_setattr')
         self.manager.reset_database()
-        paper_table = DBTable.get_table_object(self.manager, 'paper')
+        paper_table = DBTable.get_table_object( 'paper', self.manager)
         paper_dict = {
             'title':    'A Paper',
             'url':      "http://mikethicke.com",
@@ -83,7 +97,7 @@ class TestDBEntity():
     def test_entities_from_table_rows(self):
         logging.getLogger('bibliom.pytest').debug('-->TestDBEntity.test_entities_from_table_rows')
         self.manager.reset_database()
-        author_table = DBTable.get_table_object(self.manager, 'author')
+        author_table = DBTable.get_table_object('author', self.manager)
         for i in range(0, 100):
             author_table.create_new_row({
                 'last_name':    'Numberer',
@@ -109,7 +123,7 @@ class TestDBEntity():
     def test_fetch_entities(self):
         logging.getLogger('bibliom.pytest').debug('-->TestDBEntity.test_fetch_entities')
         self.manager.reset_database()
-        author_table = DBTable.get_table_object(self.manager, 'author')
+        author_table = DBTable.get_table_object( 'author', self.manager)
         for i in range(0, 100):
             author_table.create_new_row({
                 'last_name':    'Numberer',
@@ -131,7 +145,7 @@ class TestDBEntity():
     def test_fetch_entity(self):
         logging.getLogger('bibliom.pytest').debug('-->TestDBEntity.test_fetch_entity')
         self.manager.reset_database()
-        author_table = DBTable.get_table_object(self.manager, 'author')
+        author_table = DBTable.get_table_object( 'author', self.manager)
         for i in range(0, 100):
             author_table.create_new_row({
                 'last_name':    'Numberer',
@@ -151,7 +165,7 @@ class TestDBEntity():
             'url':      "http://mikethicke.com",
             'idpaper':  1
         }
-        paper_table = DBTable.get_table_object(self.manager, 'paper')
+        paper_table = DBTable.get_table_object( 'paper', self.manager)
         row_key = paper_table.create_new_row(paper_dict)
         new_entity = DBEntity.entity_from_row(paper_table, row_key)
         assert new_entity.title == 'A Paper'
@@ -167,7 +181,7 @@ class TestDBEntity():
     def test_generate_entities(self):
         logging.getLogger('bibliom.pytest').debug('-->TestDBEntity.test_generate_entities')
         self.manager.reset_database()
-        author_table = DBTable.get_table_object(self.manager, 'author')
+        author_table = DBTable.get_table_object( 'author', self.manager)
         for i in range(0, 100):
             author_table.create_new_row({
                 'last_name':    'Numberer',
@@ -182,7 +196,7 @@ class TestDBEntity():
     def test_fields_dict(self):
         logging.getLogger('bibliom.pytest').debug('-->TestDBEntity.test_fields_dict')
         self.manager.reset_database()
-        paper_table = DBTable.get_table_object(self.manager, 'paper')
+        paper_table = DBTable.get_table_object( 'paper', self.manager)
         paper_dict = {
             'title':    'A Paper',
             'url':      "http://mikethicke.com",
@@ -204,7 +218,7 @@ class TestDBEntity():
             'url':          "http://mikethicke.com",
             'first_page':   10
         }
-        paper_table = DBTable.get_table_object(self.manager, 'paper')
+        paper_table = DBTable.get_table_object( 'paper', self.manager)
         p1 = DBEntity(paper_table, fields_dict=paper_dict)
         p2 = DBEntity(paper_table, fields_dict=paper2_dict)
         p1.append(p2)
@@ -218,7 +232,7 @@ class TestDBEntity():
     def test_get_field(self):
         logging.getLogger('bibliom.pytest').debug('-->TestDBEntity.test_get_field')
         self.manager.reset_database()
-        paper_table = DBTable.get_table_object(self.manager, 'paper')
+        paper_table = DBTable.get_table_object( 'paper', self.manager)
         paper_dict = {
             'title':    'A Paper',
             'url':      "http://mikethicke.com",
@@ -230,7 +244,7 @@ class TestDBEntity():
     def test_set_field(self):
         logging.getLogger('bibliom.pytest').debug('-->TestDBEntity.test_set_field')
         self.manager.reset_database()
-        paper_table = DBTable.get_table_object(self.manager, 'paper')
+        paper_table = DBTable.get_table_object( 'paper', self.manager)
         paper_dict = {
             'title':    'A Paper',
             'url':      "http://mikethicke.com",
@@ -246,7 +260,7 @@ class TestDBEntity():
     def test_save_to_db(self):
         logging.getLogger('bibliom.pytest').debug('-->TestDBEntity.test_save_to_db')
         self.manager.reset_database()
-        paper_table = DBTable.get_table_object(self.manager, 'paper')
+        paper_table = DBTable.get_table_object( 'paper', self.manager)
         paper_dict = {
             'title':    'A Paper',
             'url':      "http://mikethicke.com",
@@ -263,7 +277,7 @@ class TestDBEntity():
     def test_eq(self):
         logging.getLogger('bibliom.pytest').debug('-->TestDBEntity.test_eq')
         self.manager.reset_database()
-        paper_table = DBTable.get_table_object(self.manager, 'paper')
+        paper_table = DBTable.get_table_object( 'paper', self.manager)
         paper_dict = {
             'title':    'A Paper',
             'url':      "http://mikethicke.com",
@@ -279,3 +293,13 @@ class TestDBEntity():
 
         assert entity is not None
         assert entity != 'A Paper'
+
+    def test_protect_fields(self):
+        logging.getLogger('bibliom.pytest').debug('-->TestDBEntity.test_protect_fields')
+        entity = DBEntity('paper', title='Paper', protect_fields=True)
+        assert entity.title == 'Paper'
+        entity.title = 'Another Paper'
+        assert entity.title == 'Paper'
+        entity.protect_fields = False
+        entity.title = 'Another Paper'
+        assert entity.title == 'Another Paper'
