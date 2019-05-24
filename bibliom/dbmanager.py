@@ -41,9 +41,13 @@ class DBManager:
 
         if config is None:
             config = 'USER'
-        
+
         self.config = config
 
+        logging.getLogger(__name__).debug(
+            'Instantiating new DBManager. DB: %s User: %s PW: %s', 
+            self.name, self.user, self.password
+        )
         DBManager.manager_instances.append(self)
 
     def __del__(self):
@@ -51,7 +55,7 @@ class DBManager:
 
     def __str__(self):
         return str(self.name)
-    
+
     def __repr__(self):
         table_list = self.list_tables()
         table_names = ""
@@ -69,6 +73,17 @@ class DBManager:
         else:
             rep_string += "{:15}: {}".format("Tables", table_names)
         return rep_string
+
+    def __setattr__(self, attr_name, value):
+        # Ensure that each db only has one manager.
+        if attr_name == 'name':
+            for instance in DBManager.manager_instances:
+                if instance is not self and instance.name == attr_name:
+                    raise exceptions.BiblioException(
+                        'A manager for %s already exists. ' % value +
+                        'Cannot have more than one manager for a db.'
+                    )
+        object.__setattr__(self, attr_name, value)
 
     def _run_sql(self, sql_statements, ignore_exceptions=False):
         """
@@ -239,6 +254,15 @@ class DBManager:
                     'where_or_clause'    : where_or_clause}
         return None
 
+    @staticmethod
+    def clear_managers():
+        """
+        Closes connections for all existing managers and removes them from
+        manager_instances list.
+        """
+        for manager in DBManager.manager_instances:
+            manager.close()
+        DBManager.manager_instances = []
 
     @classmethod
     def get_manager_for_config(cls, config):
@@ -265,6 +289,22 @@ class DBManager:
         pass a manager.
         """
         return DBManager.get_manager_for_config('DEFAULT')
+
+    @classmethod
+    def get_manager(cls):
+        """
+        If exactly one manager instance exists, return it. If none exist,
+        return the default manager. If more than one exists, raise an exception.
+        """
+        if len(DBManager.manager_instances) == 1:
+            return DBManager.manager_instances[0]
+        if not DBManager.manager_instances:
+            return DBManager.get_default_manager()
+        raise exceptions.DBIntegrityError(
+            "Can't use get_manager when more than on manager is instantiated. " +
+            "Total of %s managers. " % len(DBManager.manager_instances)
+        )
+        
 
     def connect(self):
         """

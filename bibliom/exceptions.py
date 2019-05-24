@@ -40,4 +40,3 @@ class FileParseError(ParsingError):
     """
     Raised when a text file cannot be decoded or parsed.
     """
-

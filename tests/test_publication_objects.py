@@ -41,14 +41,40 @@ class TestPaper():
             row_key='idpaper' + DBTable.KEY_STR_DELIMITER + '1'
         )
         assert paper.title
+    
+    def test_fetch(self, import_small_database):
+        logging.getLogger('bibliom.pytest').debug('-->TestPaper.test_fetch')
+        paper = Paper.fetch(
+            manager=self.manager,
+            where_dict={'doi': '10.1016/j.ijhydene.2016.06.178'}
+        )
+        assert paper.title == (
+            'Plasma equilibrium reconstruction for the nuclear fusion of ' +
+            'magnetically confined hydrogen isotopes'
+        )
+        paper = Paper.fetch(where_dict={'doi': '10.1016/j.ijhydene.2016.06.178'})
+        assert paper.title == (
+            'Plasma equilibrium reconstruction for the nuclear fusion of ' +
+            'magnetically confined hydrogen isotopes'
+        )
+        paper = Paper.fetch(doi='10.1016/j.ijhydene.2016.06.178')
+        assert paper.title == (
+            'Plasma equilibrium reconstruction for the nuclear fusion of ' +
+            'magnetically confined hydrogen isotopes'
+        )
 
     def test_str(self, import_small_database):
         logging.getLogger('bibliom.pytest').debug('-->TestPaper.test_str')
-        paper = Paper.fetch(
-            where_dict={'doi': '10.1089/ars.2017.7361'}
-        )
-        assert str(paper) == (
-            'Redox-Sensing Iron-Sulfur Cluster Regulators (10.1089/ars.2017.7361)'
+        paper_table = DBTable.get_table_object('paper', self.manager)
+        new_paper = Paper(
+            table=paper_table,
+            fields_dict={
+                'title':    "A New Paper",
+                'doi':      "10.1231/12312"
+            })
+
+        assert str(new_paper) == (
+            'A New Paper (10.1231/12312)'
         )
 
     def test_authors(self, import_small_database):
@@ -136,27 +162,6 @@ class TestPaper():
 
         with pytest.raises(TypeError):
             source_paper.cite("hello")
-
-    def test_fetch(self, import_small_database):
-        logging.getLogger('bibliom.pytest').debug('-->TestPaper.test_fetch')
-        paper = Paper.fetch(
-            manager=self.manager,
-            where_dict={'doi': '10.1016/j.ijhydene.2016.06.178'}
-        )
-        assert paper.title == (
-            'Plasma equilibrium reconstruction for the nuclear fusion of ' +
-            'magnetically confined hydrogen isotopes'
-        )
-        paper = Paper.fetch(where_dict={'doi': '10.1016/j.ijhydene.2016.06.178'})
-        assert paper.title == (
-            'Plasma equilibrium reconstruction for the nuclear fusion of ' +
-            'magnetically confined hydrogen isotopes'
-        )
-        paper = Paper.fetch(doi='10.1016/j.ijhydene.2016.06.178')
-        assert paper.title == (
-            'Plasma equilibrium reconstruction for the nuclear fusion of ' +
-            'magnetically confined hydrogen isotopes'
-        )
 
 @pytest.mark.usefixtures('class_manager')
 class TestAuthor():

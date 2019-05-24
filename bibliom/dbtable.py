@@ -19,7 +19,7 @@ class DBTable:
 
     def __init__(self, table_name, manager=None):
         if manager is None:
-            manager = DBManager.get_default_manager()
+            manager = DBManager.get_manager()
             if manager is None:
                 raise exceptions.BiblioException(
                     'Attempted to create DBTable instance with default manager,' +
@@ -103,7 +103,7 @@ class DBTable:
         return new DBTable for table_name and add it to self.dtbales.
         """
         if manager is None:
-            manager = DBManager.get_default_manager()
+            manager = DBManager.get_manager()
             if manager is None:
                 raise exceptions.BiblioException(
                     'Manager is None and no default manager found.'
@@ -170,7 +170,6 @@ class DBTable:
         rows = self.manager.fetch_rows(self.table_name, where_dict, limit, order_by, **kwargs)
         if rows is None:
             return None
-
         primary_keys = self.manager.primary_key_list(self.table_name)
         rows_dict = {}
         for row in rows:

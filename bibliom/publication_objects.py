@@ -3,6 +3,8 @@ This module implements publication objects for a bibliometric database.
 """
 import re
 
+import logging
+
 from bibliom.dbentity import DBEntity
 from bibliom.dbtable import DBTable
 from bibliom import exceptions

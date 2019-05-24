@@ -20,7 +20,7 @@ class TestDBEntity():
     def test_init(self):
         logging.getLogger('bibliom.pytest').debug('-->TestDBEntity.test_init')
         self.manager.reset_database()
-        paper_table = DBTable.get_table_object( 'paper', self.manager)
+        paper_table = DBTable.get_table_object('paper', self.manager)
         paper_dict = {
             'title':    'A Paper',
             'url':      "http://mikethicke.com",
@@ -108,8 +108,8 @@ class TestDBEntity():
         assert len(entities) == 100
         assert entities[0].last_name == 'Numberer'
 
-        with pytest.raises(TypeError):
-            entities = DBEntity.entities_from_table_rows(author_table, [])
+        entities = DBEntity.entities_from_table_rows(author_table, [])
+        assert entities == []
 
         with pytest.raises(TypeError):
             entities = DBEntity.entities_from_table_rows('hello', author_table.rows)

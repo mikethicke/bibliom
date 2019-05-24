@@ -23,12 +23,6 @@ class TestDBManager():
     """
     def test_init(self):
         logging.getLogger('bibliom.pytest').debug('-->TestDBManager.test_init')
-        with pytest.raises(exceptions.UnknownDatabaseError):
-            bad_manager = DBManager(
-                name='aaaaadfasfasdfdasfdsa',
-                user=DB_USER,
-                password=DB_PASSWORD
-            )
         with pytest.raises(MySQLdb.Error):
             bad_manager = DBManager(
                 name=DB_NAME,
@@ -49,6 +43,14 @@ class TestDBManager():
         )
         assert isinstance(manager.db, MySQLdb.connections.Connection)
         assert len(DBManager.manager_instances) == 2
+
+        manager = DBManager(
+            name='aaaaadfasfasdfdasfdsa',
+            user=DB_USER,
+            password=DB_PASSWORD
+        )
+        assert manager.db is None
+        assert len(DBManager.manager_instances) == 3
 
     def test_str(self):
         logging.getLogger('bibliom.pytest').debug('-->TestDBManager.test_str')

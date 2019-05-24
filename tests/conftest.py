@@ -12,7 +12,7 @@ from bibliom import dbmanager
 
 logging.getLogger('bibliom.pytest').debug("### Beginning pytest session. ###")
 
-@pytest.fixture(scope="session")
+@pytest.fixture(scope="class")
 def import_small_database():
     """
     Imports a small database to test_db for testing.
@@ -29,7 +29,11 @@ def import_small_database():
 
 @pytest.fixture(scope="class")
 def class_manager(request):
+    """
+    Adds self.manager to test classes.
+    """
     logging.getLogger('bibliom.pytest').debug('Pytest: class_manager fixture')
+    dbmanager.DBManager.clear_managers()
     manager = dbmanager.DBManager.get_manager_for_config(config='TEST')
     if manager.db is None:
         manager.reset_database()

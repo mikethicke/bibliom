@@ -1,6 +1,7 @@
 """
 DBEntity class.
 """
+import logging
 
 from bibliom import exceptions
 from bibliom.dbtable import DBTable
@@ -21,7 +22,7 @@ class DBEntity:
                  **kwargs):
         if isinstance(table, str):
             if manager is None:
-                manager = DBManager.get_default_manager()
+                manager = DBManager.get_manager()
                 if manager is None:
                     raise exceptions.BiblioException(
                         'Attempting to create DBEntity, but not given DBTable ' +
@@ -145,6 +146,8 @@ class DBEntity:
         """
         entity_list = cls.fetch_entities(table, where_dict, **kwargs)
         if entity_list:
+            if entity_list[0] is not None:
+                logging.getLogger(__name__).debug('Entity.fetch: entity is not None.')
             return entity_list[0]
         return None
 
@@ -223,6 +226,10 @@ class DBEntity:
         """
         Restores a deleted entity and resaves to database.
         """
+        if self.table.row_status[self.row_key] != DBTable.RowStatus.DELETED:
+            raise exceptions.DBIntegrityError(
+                'Attempting to undelete a row that has not been deleted.'
+            )
         self.table.row_status[self.row_key] = DBTable.RowStatus.UNSYNCED
         self.save_to_db(duplicates)
 
